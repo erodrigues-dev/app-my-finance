@@ -32,6 +32,8 @@ function getMonthsInRange(offset: number): { month: number; year: number }[] {
   return result;
 }
 
+const MAX_FUTURE_OFFSET = 4;
+
 function MiniChart({
   income,
   expense,
@@ -102,10 +104,11 @@ export default function MonthPickerScreen() {
   );
 
   const canGoNext = offset > 0;
+  const canGoFuture = offset > -MAX_FUTURE_OFFSET;
   const rangeLabel =
     offset === 0
       ? pt.monthPickerRecent
-      : `${MONTH_NAMES[months[5].month]} ${months[5].year} - ${MONTH_NAMES[months[0].month]} ${months[0].year}`;
+      : `${MONTH_NAMES[months[0].month]} ${months[0].year} - ${MONTH_NAMES[months[5].month]} ${months[5].year}`;
 
   const handleSelectMonth = (month: number, year: number) => {
     setSelectedMonth({ month, year });
@@ -125,12 +128,12 @@ export default function MonthPickerScreen() {
           {rangeLabel}
         </Text>
         <Pressable
-          onPress={() => canGoNext && setOffset((o) => o - 1)}
-          disabled={!canGoNext}
+          onPress={() => canGoFuture && setOffset((o) => o - 1)}
+          disabled={!canGoFuture}
           style={({ pressed }) => [
             styles.navButton,
             pressed && { opacity: 0.6 },
-            !canGoNext && { opacity: 0.3 },
+            !canGoFuture && { opacity: 0.3 },
           ]}
         >
           <FontAwesome

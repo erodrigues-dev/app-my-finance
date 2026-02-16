@@ -31,12 +31,7 @@ export function MonthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const goToNextMonth = useCallback(() => {
-    const current = getCurrentMonthYear();
     setSelectedMonth((prev) => {
-      if (prev.month === 11 && prev.year >= current.year) return prev;
-      if (prev.year > current.year) return prev;
-      if (prev.year === current.year && prev.month >= current.month) return prev;
-
       if (prev.month === 11) {
         return { month: 0, year: prev.year + 1 };
       }
@@ -48,10 +43,7 @@ export function MonthProvider({ children }: { children: React.ReactNode }) {
     setSelectedMonth(getCurrentMonthYear());
   }, []);
 
-  const current = getCurrentMonthYear();
-  const canGoNext =
-    selectedMonth.year < current.year ||
-    (selectedMonth.year === current.year && selectedMonth.month < current.month);
+  const canGoNext = true;
 
   return (
     <MonthContext.Provider
