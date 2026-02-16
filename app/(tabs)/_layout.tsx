@@ -35,17 +35,25 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="categories"
-        options={{
-          title: pt.categories,
-          tabBarIcon: ({ color }) => <TabBarIcon name="list" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="charts"
         options={{
           title: pt.charts,
           tabBarIcon: ({ color }) => <TabBarIcon name="bar-chart" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="fixed-expenses"
+        options={{
+          title: pt.fixedExpenses,
+          tabBarLabel: pt.fixedExpenses,
+          tabBarIcon: ({ color }) => <TabBarIcon name="repeat" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="categories"
+        options={{
+          title: pt.categories,
+          tabBarIcon: ({ color }) => <TabBarIcon name="list" color={color} />,
         }}
       />
       <Tabs.Screen

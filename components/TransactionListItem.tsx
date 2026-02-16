@@ -5,6 +5,15 @@ import { useThemeColors } from "@/hooks/useThemeColors";
 import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
 import type { TransactionWithCategory } from "@/types";
 
+function formatDateShort(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!d || !m || !y) return dateStr;
+  const day = String(d).padStart(2, "0");
+  const month = String(m).padStart(2, "0");
+  const year = String(y).slice(-2);
+  return `${day}/${month}/${year}`;
+}
+
 interface Props {
   transaction: TransactionWithCategory;
   onPress: () => void;
@@ -37,14 +46,13 @@ export function TransactionListItem({ transaction, onPress }: Props) {
         <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
           {transaction.name}
         </Text>
-        {transaction.category_name && (
-          <Text
-            style={[styles.category, { color: colors.tabIconDefault }]}
-            numberOfLines={1}
-          >
-            {transaction.category_name}
-          </Text>
-        )}
+        <Text
+          style={[styles.category, { color: colors.tabIconDefault }]}
+          numberOfLines={1}
+        >
+          {formatDateShort(transaction.date)}
+          {transaction.category_name ? ` · ${transaction.category_name}` : ""}
+        </Text>
       </View>
       <Text style={[styles.amount, { color: amountColor }]}>
         {isIncome ? "+" : "-"} {formatCurrency(transaction.amount)}

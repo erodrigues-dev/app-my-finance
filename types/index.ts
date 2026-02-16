@@ -7,6 +7,15 @@ export interface Category {
   color: string;
 }
 
+export interface FixedExpense {
+  id: number;
+  name: string;
+  amount: number;
+  due_day: number;
+  category_id: number | null;
+  note: string | null;
+}
+
 export interface Transaction {
   id: number;
   type: TransactionType;
@@ -15,6 +24,8 @@ export interface Transaction {
   date: string;
   category_id: number | null;
   note: string | null;
+  fixed_expense_id?: number | null;
+  paid?: number;
 }
 
 export interface TransactionWithCategory extends Transaction {

@@ -52,6 +52,14 @@ function RootLayoutNav() {
             name="month-picker"
             options={{ presentation: "modal", title: "Selecionar mês" }}
           />
+          <Stack.Screen
+            name="add-fixed-expense"
+            options={{ presentation: "modal", title: "Adicionar gasto fixo" }}
+          />
+          <Stack.Screen
+            name="edit-fixed-expense"
+            options={{ presentation: "modal", title: "Editar gasto fixo" }}
+          />
         </Stack>
       </MonthProvider>
     </>

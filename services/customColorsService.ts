@@ -8,11 +8,11 @@ export async function loadCustomColors(): Promise<string[]> {
   if (cachedColors !== null) return cachedColors;
   try {
     const stored = await AsyncStorage.getItem(CUSTOM_COLORS_KEY);
-    cachedColors = stored ? JSON.parse(stored) : [];
+    cachedColors = stored ? (JSON.parse(stored) as string[]) : [];
   } catch {
     cachedColors = [];
   }
-  return cachedColors;
+  return cachedColors ?? [];
 }
 
 export function getCustomColorsSync(): string[] {

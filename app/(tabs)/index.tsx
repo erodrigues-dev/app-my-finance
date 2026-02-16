@@ -19,7 +19,9 @@ import {
   getTransactionsByMonth,
   getMonthlyTotals,
   getCategorySpendingByMonth,
+  updateTransactionPaid,
 } from "@/services/transactionService";
+import { FixedExpenseListItem } from "@/components/FixedExpenseListItem";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -28,6 +30,8 @@ export default function HomeScreen() {
   const { selectedMonth } = useMonth();
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [transactionsExpanded, setTransactionsExpanded] = useState(true);
+  const [fixedExpensesExpanded, setFixedExpensesExpanded] = useState(true);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -40,10 +44,35 @@ export default function HomeScreen() {
     [selectedMonth, refreshKey]
   );
 
-  const transactions = useMemo(
+  const allTransactions = useMemo(
     () => getTransactionsByMonth(selectedMonth.month, selectedMonth.year),
     [selectedMonth, refreshKey]
   );
+
+  const regularTransactions = useMemo(() => {
+    const list = allTransactions.filter((t) => t.fixed_expense_id == null);
+    return [...list].sort((a, b) => {
+      const dateCmp = (b.date || "").localeCompare(a.date || "");
+      if (dateCmp !== 0) return dateCmp;
+      return (a.category_name || "").localeCompare(b.category_name || "");
+    });
+  }, [allTransactions]);
+
+  const fixedExpenseTransactions = useMemo(() => {
+    const list = allTransactions.filter((t) => t.fixed_expense_id != null);
+    return [...list].sort((a, b) => {
+      const paidCmp = (a.paid ?? 0) - (b.paid ?? 0);
+      if (paidCmp !== 0) return paidCmp;
+      const dateCmp = (a.date || "").localeCompare(b.date || "");
+      if (dateCmp !== 0) return dateCmp;
+      return (a.category_name || "").localeCompare(b.category_name || "");
+    });
+  }, [allTransactions]);
+
+  const handleTogglePaid = (id: number, paid: number) => {
+    updateTransactionPaid(id, paid);
+    setRefreshKey((k) => k + 1);
+  };
 
   const categoriesOverLimit = useMemo(() => {
     const spending = getCategorySpendingByMonth(
@@ -132,7 +161,7 @@ export default function HomeScreen() {
             pressed && styles.pressed,
           ]}
         >
-          <FontAwesome name="plus" size={18} color="#fff" />
+          <FontAwesome name="arrow-down" size={18} color="#fff" />
           <Text style={styles.actionButtonText}>{pt.addIncome}</Text>
         </Pressable>
         <Pressable
@@ -143,27 +172,81 @@ export default function HomeScreen() {
             pressed && styles.pressed,
           ]}
         >
-          <FontAwesome name="minus" size={18} color="#fff" />
+          <FontAwesome name="arrow-up" size={18} color="#fff" />
           <Text style={styles.actionButtonText}>{pt.addExpense}</Text>
         </Pressable>
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          {pt.transactions}
-        </Text>
-        {transactions.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
-            {pt.noTransactions}
+        <Pressable
+          onPress={() => setTransactionsExpanded((e) => !e)}
+          style={({ pressed }) => [
+            styles.sectionHeader,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            {pt.transactions}
           </Text>
-        ) : (
-          transactions.map((tx) => (
-            <TransactionListItem
-              key={tx.id}
-              transaction={tx}
-              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-            />
-          ))
+          <FontAwesome
+            name={transactionsExpanded ? "chevron-down" : "chevron-right"}
+            size={18}
+            color={colors.tabIconDefault}
+          />
+        </Pressable>
+        {transactionsExpanded && (
+          <>
+            {regularTransactions.length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+                {pt.noTransactions}
+              </Text>
+            ) : (
+              regularTransactions.map((tx) => (
+                <TransactionListItem
+                  key={tx.id}
+                  transaction={tx}
+                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                />
+              ))
+            )}
+          </>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <Pressable
+          onPress={() => setFixedExpensesExpanded((e) => !e)}
+          style={({ pressed }) => [
+            styles.sectionHeader,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            {pt.fixedExpenses}
+          </Text>
+          <FontAwesome
+            name={fixedExpensesExpanded ? "chevron-down" : "chevron-right"}
+            size={18}
+            color={colors.tabIconDefault}
+          />
+        </Pressable>
+        {fixedExpensesExpanded && (
+          <>
+            {fixedExpenseTransactions.length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+                {pt.noFixedExpenses}
+              </Text>
+            ) : (
+              fixedExpenseTransactions.map((tx) => (
+                <FixedExpenseListItem
+                  key={tx.id}
+                  transaction={tx}
+                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                  onTogglePaid={handleTogglePaid}
+                />
+              ))
+            )}
+          </>
         )}
       </View>
     </ScrollView>
@@ -198,11 +281,17 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginHorizontal: 16,
-    marginBottom: 12,
   },
   overLimitCard: {
     marginHorizontal: 16,

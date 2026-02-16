@@ -6,6 +6,7 @@ export const pt = {
   home: "Início",
   categories: "Categorias",
   charts: "Gráficos",
+  fixedExpenses: "Gastos fixos",
   settings: "Configurações",
 
   // Home
@@ -17,6 +18,7 @@ export const pt = {
   categoriesOverLimit: "Categorias acima do limite",
   transactions: "Transações",
   noTransactions: "Nenhuma transação este mês",
+  noFixedExpenses: "Nenhum gasto fixo lançado este mês",
 
   // Add forms
   addIncomeTitle: "Adicionar Entrada",
@@ -42,6 +44,9 @@ export const pt = {
   color: "Cor",
   customColor: "Cor personalizada",
   delete: "Excluir",
+  deleteTransaction: "Excluir transação",
+  deleteTransactionConfirmTitle: "Excluir transação",
+  deleteTransactionConfirmMessage: "Deseja excluir esta transação?",
   deleteColorTitle: "Excluir cor",
   deleteColorMessage: "Deseja excluir esta cor personalizada?",
   deleteColorInUseTitle: "Cor em uso",
@@ -71,6 +76,16 @@ export const pt = {
   confirmRestore: "Restaurar backup substituirá todos os dados atuais. Deseja continuar?",
   restoreSuccess: "Backup restaurado com sucesso",
   backupSuccess: "Backup criado com sucesso",
+
+  // Fixed expenses
+  addFixedExpense: "Adicionar gasto fixo",
+  importFixedExpenses: "Importar",
+  selectMonth: "Selecionar mês",
+  dueDay: "Dia do vencimento",
+  paid: "Pago",
+  noFixedExpensesList: "Nenhum gasto fixo. Adicione um e use \"Importar\" para lançar no mês.",
+  fixedExpensesSyncFeedback: "gasto(s) sincronizado(s) para",
+  selectMonthToImport: "Selecionar mês para importar",
 
   // Month selector
   monthPickerTitle: "Selecionar mês",

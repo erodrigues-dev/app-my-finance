@@ -20,10 +20,13 @@ export function getTransactionsByMonth(
     date: string;
     category_id: number | null;
     note: string | null;
+    fixed_expense_id: number | null;
+    paid: number | null;
     category_name: string | null;
     category_color: string | null;
   }>(
     `SELECT t.id, t.type, t.name, t.amount, t.date, t.category_id, t.note,
+            t.fixed_expense_id, t.paid,
             c.name as category_name, c.color as category_color
      FROM transactions t
      LEFT JOIN categories c ON t.category_id = c.id
@@ -41,6 +44,8 @@ export function getTransactionsByMonth(
     date: r.date,
     category_id: r.category_id,
     note: r.note,
+    fixed_expense_id: r.fixed_expense_id ?? undefined,
+    paid: r.paid ?? 0,
     category_name: r.category_name ?? undefined,
     category_color: r.category_color ?? undefined,
   }));
@@ -56,9 +61,16 @@ export function getTransactionById(id: number): Transaction | null {
     date: string;
     category_id: number | null;
     note: string | null;
-  }>("SELECT id, type, name, amount, date, category_id, note FROM transactions WHERE id = ?", id);
+    fixed_expense_id: number | null;
+    paid: number | null;
+  }>("SELECT id, type, name, amount, date, category_id, note, fixed_expense_id, paid FROM transactions WHERE id = ?", id);
   if (!row) return null;
-  return { ...row, type: row.type as TransactionType };
+  return {
+    ...row,
+    type: row.type as TransactionType,
+    fixed_expense_id: row.fixed_expense_id ?? undefined,
+    paid: row.paid ?? 0,
+  };
 }
 
 export function createTransaction(
@@ -67,17 +79,21 @@ export function createTransaction(
   amount: number,
   date: string,
   categoryId: number | null,
-  note: string | null
+  note: string | null,
+  fixedExpenseId?: number | null,
+  paid?: number
 ): number {
   const db = getDb();
   const result = db.runSync(
-    "INSERT INTO transactions (type, name, amount, date, category_id, note) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO transactions (type, name, amount, date, category_id, note, fixed_expense_id, paid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     type,
     name,
     amount,
     date,
     categoryId,
-    note ?? null
+    note ?? null,
+    fixedExpenseId ?? null,
+    paid ?? 0
   );
   return result.lastInsertRowId;
 }
@@ -89,19 +105,28 @@ export function updateTransaction(
   amount: number,
   date: string,
   categoryId: number | null,
-  note: string | null
+  note: string | null,
+  fixedExpenseId?: number | null,
+  paid?: number
 ): void {
   const db = getDb();
   db.runSync(
-    "UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ? WHERE id = ?",
+    "UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ?, fixed_expense_id = ?, paid = ? WHERE id = ?",
     type,
     name,
     amount,
     date,
     categoryId,
     note ?? null,
+    fixedExpenseId ?? null,
+    paid ?? 0,
     id
   );
+}
+
+export function updateTransactionPaid(id: number, paid: number): void {
+  const db = getDb();
+  db.runSync("UPDATE transactions SET paid = ? WHERE id = ?", paid, id);
 }
 
 export function deleteTransaction(id: number): void {

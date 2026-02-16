@@ -20,4 +20,15 @@ export const migrations = [
   `CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)`,
   `CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type)`,
   `CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id)`,
+  `CREATE TABLE IF NOT EXISTS fixed_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    amount REAL NOT NULL,
+    due_day INTEGER NOT NULL,
+    category_id INTEGER,
+    note TEXT,
+    FOREIGN KEY (category_id) REFERENCES categories(id)
+  )`,
+  `ALTER TABLE transactions ADD COLUMN fixed_expense_id INTEGER REFERENCES fixed_expenses(id)`,
+  `ALTER TABLE transactions ADD COLUMN paid INTEGER DEFAULT 0`,
 ];

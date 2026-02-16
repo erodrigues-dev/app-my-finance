@@ -10,7 +10,12 @@ export function initDatabase() {
   if (!db) {
     db = openDatabaseSync("myfinance.db");
     for (const sql of migrations) {
-      db.execSync(sql);
+      try {
+        db.execSync(sql);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!msg.includes("duplicate column name")) throw e;
+      }
     }
   }
   return db;
