@@ -1,19 +1,30 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+import { colors, darkTheme, lightTheme } from "@/theme";
 
 export default {
   light: {
-    text: '#000',
-    background: '#fff',
-    tint: tintColorLight,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorLight,
+    text: lightTheme.foreground,
+    background: lightTheme.background,
+    tint: lightTheme.accent,
+    tabIconDefault: lightTheme.muted,
+    tabIconSelected: lightTheme.accent,
+    income: lightTheme.income,
+    expense: lightTheme.expense,
+    incomeButton: lightTheme.incomeButton,
+    expenseButton: lightTheme.expenseButton,
+    card: lightTheme.card,
   },
   dark: {
-    text: '#fff',
-    background: '#000',
-    tint: tintColorDark,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorDark,
+    text: darkTheme.foreground,
+    background: darkTheme.background,
+    tint: darkTheme.accent,
+    tabIconDefault: darkTheme.muted,
+    tabIconSelected: darkTheme.accent,
+    income: darkTheme.income,
+    expense: darkTheme.expense,
+    incomeButton: darkTheme.incomeButton,
+    expenseButton: darkTheme.expenseButton,
+    card: darkTheme.card,
   },
 };
+
+export { colors, darkTheme, lightTheme };
