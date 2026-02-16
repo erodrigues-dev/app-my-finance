@@ -6,6 +6,8 @@ import {
   Pressable,
   StyleSheet,
   Alert,
+  Switch,
+  Platform,
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as DocumentPicker from "expo-document-picker";
@@ -13,12 +15,42 @@ import * as FileSystem from "expo-file-system/legacy";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useTheme } from "@/context/ThemeContext";
 import { shareBackup, restoreBackup } from "@/services/exportService";
+import { useAuth } from "@/context/AuthContext";
 import { pt } from "@/locales/pt";
 
 export default function SettingsScreen() {
   const colors = useThemeColors();
   const { themeMode, setThemeMode } = useTheme();
+  const {
+    biometricEnabled,
+    enableBiometric,
+    disableBiometric,
+    isBiometricAvailable,
+  } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+
+  const handleBiometricToggle = async (value: boolean) => {
+    if (Platform.OS === "web") return;
+    setBiometricLoading(true);
+    try {
+      if (value) {
+        const success = await enableBiometric();
+        if (!success) {
+          Alert.alert(
+            pt.biometricTitle,
+            isBiometricAvailable === false
+              ? pt.biometricNotAvailable
+              : pt.biometricNotEnrolled
+          );
+        }
+      } else {
+        await disableBiometric();
+      }
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
 
   const handleBackup = async () => {
     try {
@@ -98,6 +130,34 @@ export default function SettingsScreen() {
           ))}
         </View>
       </View>
+
+      {Platform.OS !== "web" && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            {pt.settingsSecurity}
+          </Text>
+          <View style={[styles.card, { backgroundColor: colors.theme.card }]}>
+            <View style={styles.optionRow}>
+              <FontAwesome name="lock" size={20} color={colors.tint} />
+              <View style={styles.optionContent}>
+                <Text style={[styles.optionLabel, { color: colors.text }]}>
+                  {pt.settingsBiometricLock}
+                </Text>
+                <Text style={[styles.optionDesc, { color: colors.tabIconDefault }]}>
+                  {pt.settingsBiometricLockDesc}
+                </Text>
+              </View>
+              <Switch
+                value={biometricEnabled}
+                onValueChange={handleBiometricToggle}
+                disabled={biometricLoading || isBiometricAvailable === false}
+                trackColor={{ false: colors.tabIconDefault + "60", true: colors.tint + "80" }}
+                thumbColor={biometricEnabled ? colors.tint : "#f4f3f4"}
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>

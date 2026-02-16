@@ -76,6 +76,20 @@ export const pt = {
   confirmRestore: "Restaurar backup substituirá todos os dados atuais. Deseja continuar?",
   restoreSuccess: "Backup restaurado com sucesso",
   backupSuccess: "Backup criado com sucesso",
+  settingsSecurity: "Segurança",
+  settingsBiometricLock: "Proteger com biometria",
+  settingsBiometricLockDesc: "Face ID ou impressão digital ao abrir o app",
+
+  // Biometria / Login
+  biometricTitle: "Desbloquear",
+  biometricDescription: "Use biometria para acessar seus dados",
+  biometricUnlock: "Desbloquear com biometria",
+  biometricNotAvailable: "Biometria não disponível neste dispositivo",
+  biometricNotEnrolled: "Configure biometria nas configurações do dispositivo",
+  firstLaunchBiometricTitle: "Proteger o app?",
+  firstLaunchBiometricMessage: "Deseja proteger o app com biometria (Face ID ou impressão digital)?",
+  firstLaunchActivate: "Ativar",
+  firstLaunchLater: "Agora não",
 
   // Fixed expenses
   addFixedExpense: "Adicionar gasto fixo",

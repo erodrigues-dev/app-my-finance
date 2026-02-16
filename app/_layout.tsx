@@ -7,11 +7,14 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { ValuesVisibilityProvider } from "@/context/ValuesVisibilityContext";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { MonthProvider } from "@/context/MonthContext";
 import { initDatabase } from "@/database/init";
+import FirstLaunchModal from "@/components/FirstLaunchModal";
+import LoginScreen from "@/app/login";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -20,6 +23,32 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync();
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const {
+    isLoading,
+    biometricEnabled,
+    isAuthenticated,
+    hasSeenFirstLaunch,
+  } = useAuth();
+  const { isDark } = useTheme();
+
+  if (isLoading) return null;
+
+  return (
+    <>
+      {biometricEnabled && !isAuthenticated ? (
+        <>
+          <StatusBar style={isDark ? "light" : "dark"} />
+          <LoginScreen />
+        </>
+      ) : (
+        children
+      )}
+      {!hasSeenFirstLaunch && <FirstLaunchModal />}
+    </>
+  );
+}
 
 function RootLayoutNav() {
   const { isDark } = useTheme();
@@ -94,7 +123,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <ValuesVisibilityProvider>
-          <RootLayoutNav />
+          <AuthProvider>
+            <AuthGate>
+              <RootLayoutNav />
+            </AuthGate>
+          </AuthProvider>
         </ValuesVisibilityProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
