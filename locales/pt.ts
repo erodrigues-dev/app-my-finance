@@ -31,6 +31,8 @@ export const pt = {
   date: "Data",
   category: "Categoria",
   selectCategory: "Selecione a categoria",
+  categorySearchPlaceholder: "Buscar categoria...",
+  noCategoryFound: "Nenhuma categoria encontrada",
   note: "Observação",
   notePlaceholder: "Opcional",
   save: "Salvar",

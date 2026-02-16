@@ -11,11 +11,13 @@ import {
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
+  Modal,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { formatCurrencyInput, parseCurrencyInput } from "@/utils/currencyInput";
+import { pt } from "@/locales/pt";
 import type { TransactionType } from "@/types";
 
 interface Category {
@@ -79,6 +81,11 @@ export function TransactionForm({
   const [note, setNote] = useState(initialNote ?? "");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+
+  const filteredCategories = categories.filter((cat) =>
+    cat.name.toLowerCase().includes(categorySearch.toLowerCase().trim())
+  );
 
   const handleSubmit = () => {
     const amount = parseCurrencyInput(amountStr);
@@ -199,59 +206,125 @@ export function TransactionForm({
       {type === "expense" && categories.length > 0 && (
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>Categoria *</Text>
-          <Pressable
-            onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+          <View
             style={[
               styles.input,
-              styles.picker,
+              styles.categoryInputRow,
               {
                 backgroundColor: colors.theme.card,
                 borderColor: colors.tabIconDefault,
               },
             ]}
           >
-            <Text
-              style={{
-                color: selectedCategory ? colors.text : colors.tabIconDefault,
+            <TextInput
+              key={`cat-${categoryId}`}
+              style={[styles.categoryTextInput, { color: colors.text }]}
+              placeholder={pt.categorySearchPlaceholder}
+              placeholderTextColor={colors.tabIconDefault}
+              value={showCategoryPicker ? categorySearch : (selectedCategory?.name ?? "")}
+              onChangeText={(t) => {
+                setCategorySearch(t);
+                setShowCategoryPicker(true);
               }}
-            >
-              {selectedCategory?.name ?? "Selecione a categoria"}
-            </Text>
-            <FontAwesome
-              name={showCategoryPicker ? "chevron-up" : "chevron-down"}
-              size={18}
-              color={colors.tabIconDefault}
+              onFocus={() => {
+                setShowCategoryPicker(true);
+                setCategorySearch(selectedCategory?.name ?? "");
+              }}
+              onBlur={() => {
+                setTimeout(() => setShowCategoryPicker(false), 250);
+              }}
             />
-          </Pressable>
-          {showCategoryPicker && (
-            <View
-              style={[
-                styles.categoryList,
-                { backgroundColor: colors.theme.card },
-              ]}
+            {(showCategoryPicker ? categorySearch : selectedCategory?.name) ? (
+              <Pressable
+                onPress={() => {
+                  setCategoryId(null);
+                  setCategorySearch("");
+                  setShowCategoryPicker(true);
+                }}
+                style={({ pressed }) => [
+                  styles.clearButton,
+                  pressed && styles.pressed,
+                ]}
+                hitSlop={8}
+              >
+                <FontAwesome name="times-circle" size={20} color={colors.tabIconDefault} />
+              </Pressable>
+            ) : null}
+          </View>
+          <Modal
+            visible={showCategoryPicker}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowCategoryPicker(false)}
+          >
+            <Pressable
+              style={styles.categoryModalOverlay}
+              onPress={() => setShowCategoryPicker(false)}
             >
-              {categories.map((cat) => (
-                <Pressable
-                  key={cat.id}
-                  onPress={() => {
-                    setCategoryId(cat.id);
-                    setShowCategoryPicker(false);
-                  }}
-                  style={[
-                    styles.categoryItem,
-                    categoryId === cat.id && {
-                      backgroundColor: colors.tint + "30",
-                    },
-                  ]}
-                >
-                  <View
-                    style={[styles.colorDot, { backgroundColor: cat.color }]}
+              <Pressable
+                style={[
+                  styles.categoryModalContent,
+                  { backgroundColor: colors.theme.card },
+                ]}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <View style={styles.categoryModalSearch}>
+                  <TextInput
+                    style={[
+                      styles.categorySearchInput,
+                      {
+                        backgroundColor: colors.background,
+                        color: colors.text,
+                        borderColor: colors.tabIconDefault,
+                      },
+                    ]}
+                    placeholder={pt.categorySearchPlaceholder}
+                    placeholderTextColor={colors.tabIconDefault}
+                    value={categorySearch}
+                    onChangeText={setCategorySearch}
+                    autoFocus
                   />
-                  <Text style={{ color: colors.text }}>{cat.name}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
+                </View>
+                <ScrollView
+                  style={styles.categoryScroll}
+                  keyboardShouldPersistTaps="always"
+                >
+                  {filteredCategories.length === 0 ? (
+                    <Text
+                      style={[
+                        styles.categoryEmpty,
+                        { color: colors.tabIconDefault },
+                      ]}
+                    >
+                      {pt.noCategoryFound}
+                    </Text>
+                  ) : (
+                    filteredCategories.map((cat) => (
+                      <Pressable
+                        key={cat.id}
+                        onPress={() => {
+                          setCategoryId(cat.id);
+                          setCategorySearch(cat.name);
+                          setShowCategoryPicker(false);
+                        }}
+                        style={[
+                          styles.categoryItem,
+                          categoryId === cat.id && {
+                            backgroundColor: colors.tint + "30",
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[styles.colorDot, { backgroundColor: cat.color }]}
+                        />
+                        <Text style={{ color: colors.text }}>{cat.name}</Text>
+                      </Pressable>
+                    ))
+                  )}
+                </ScrollView>
+              </Pressable>
+            </Pressable>
+          </Modal>
         </View>
       )}
 
@@ -323,6 +396,22 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
   },
+  categoryInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 14,
+    paddingRight: 8,
+  },
+  categoryTextInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 0,
+  },
+  clearButton: {
+    padding: 4,
+  },
   picker: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -336,6 +425,37 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 12,
     overflow: "hidden",
+    maxHeight: 200,
+  },
+  categoryModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-start",
+    paddingHorizontal: 16,
+    paddingTop: 120,
+  },
+  categoryModalContent: {
+    borderRadius: 12,
+    maxHeight: 400,
+    overflow: "hidden",
+  },
+  categoryModalSearch: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(128,128,128,0.2)",
+  },
+  categorySearchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  categoryScroll: {
+    maxHeight: 320,
+  },
+  categoryEmpty: {
+    padding: 14,
+    fontSize: 14,
   },
   categoryItem: {
     flexDirection: "row",
