@@ -65,6 +65,8 @@ export function FixedExpenseForm({
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
 
+  const closeCategoryPicker = () => setShowCategoryPicker(false);
+
   const filteredCategories = categories.filter((cat) =>
     cat.name.toLowerCase().includes(categorySearch.toLowerCase().trim())
   );
@@ -172,32 +174,52 @@ export function FixedExpenseForm({
                 color={colors.tabIconDefault}
               />
             </Pressable>
-            {showDueDayPicker && (
-              <View
-                style={[
-                  styles.categoryList,
-                  { backgroundColor: colors.theme.card },
-                ]}
+            <Modal
+              visible={showDueDayPicker}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowDueDayPicker(false)}
+            >
+              <Pressable
+                style={styles.categoryModalOverlay}
+                onPress={() => setShowDueDayPicker(false)}
               >
-                {DUE_DAYS.map((day) => (
-                  <Pressable
-                    key={day}
-                    onPress={() => {
-                      setDueDay(day);
-                      setShowDueDayPicker(false);
-                    }}
-                    style={[
-                      styles.categoryItem,
-                      dueDay === day && {
-                        backgroundColor: colors.tint + "30",
-                      },
-                    ]}
+                <Pressable
+                  style={[
+                    styles.dueDayModalContent,
+                    { backgroundColor: colors.theme.card },
+                  ]}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <Text style={[styles.dueDayModalTitle, { color: colors.text }]}>
+                    {pt.dueDay}
+                  </Text>
+                  <ScrollView
+                    style={styles.dueDayScroll}
+                    showsVerticalScrollIndicator
+                    keyboardShouldPersistTaps="handled"
                   >
-                    <Text style={{ color: colors.text }}>Dia {day}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
+                    {DUE_DAYS.map((day) => (
+                      <Pressable
+                        key={day}
+                        onPress={() => {
+                          setDueDay(day);
+                          setShowDueDayPicker(false);
+                        }}
+                        style={[
+                          styles.categoryItem,
+                          dueDay === day && {
+                            backgroundColor: colors.tint + "30",
+                          },
+                        ]}
+                      >
+                        <Text style={{ color: colors.text }}>Dia {day}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </Pressable>
+              </Pressable>
+            </Modal>
           </View>
 
           {categories.length > 0 && (
@@ -213,25 +235,26 @@ export function FixedExpenseForm({
                   },
                 ]}
               >
-                <TextInput
-                  key={`cat-${categoryId}`}
-                  style={[styles.categoryTextInput, { color: colors.text }]}
-                  placeholder={pt.categorySearchPlaceholder}
-                  placeholderTextColor={colors.tabIconDefault}
-                  value={showCategoryPicker ? categorySearch : (selectedCategory?.name ?? "")}
-                  onChangeText={(t) => {
-                    setCategorySearch(t);
-                    setShowCategoryPicker(true);
-                  }}
-                  onFocus={() => {
+                <Pressable
+                  style={styles.categoryTextInput}
+                  onPress={() => {
                     setShowCategoryPicker(true);
                     setCategorySearch(selectedCategory?.name ?? "");
                   }}
-                  onBlur={() => {
-                    setTimeout(() => setShowCategoryPicker(false), 250);
-                  }}
-                />
-                {(showCategoryPicker ? categorySearch : selectedCategory?.name) ? (
+                >
+                  <Text
+                    style={[
+                      { fontSize: 16 },
+                      selectedCategory?.name
+                        ? { color: colors.text }
+                        : { color: colors.tabIconDefault },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {selectedCategory?.name ?? pt.categorySearchPlaceholder}
+                  </Text>
+                </Pressable>
+                {selectedCategory?.name ? (
                   <Pressable
                     onPress={() => {
                       setCategoryId(null);
@@ -252,11 +275,11 @@ export function FixedExpenseForm({
                 visible={showCategoryPicker}
                 transparent
                 animationType="fade"
-                onRequestClose={() => setShowCategoryPicker(false)}
+                onRequestClose={closeCategoryPicker}
               >
                 <Pressable
                   style={styles.categoryModalOverlay}
-                  onPress={() => setShowCategoryPicker(false)}
+                  onPress={closeCategoryPicker}
                 >
                   <Pressable
                     style={[
@@ -266,21 +289,35 @@ export function FixedExpenseForm({
                     onPress={(e) => e.stopPropagation()}
                   >
                     <View style={styles.categoryModalSearch}>
-                      <TextInput
-                        style={[
-                          styles.categorySearchInput,
-                          {
-                            backgroundColor: colors.background,
-                            color: colors.text,
-                            borderColor: colors.tabIconDefault,
-                          },
-                        ]}
-                        placeholder={pt.categorySearchPlaceholder}
-                        placeholderTextColor={colors.tabIconDefault}
-                        value={categorySearch}
-                        onChangeText={setCategorySearch}
-                        autoFocus
-                      />
+                      <View style={styles.categoryModalSearchRow}>
+                        <TextInput
+                          style={[
+                            styles.categorySearchInput,
+                            {
+                              backgroundColor: colors.background,
+                              color: colors.text,
+                              borderColor: colors.tabIconDefault,
+                            },
+                          ]}
+                          placeholder={pt.categorySearchPlaceholder}
+                          placeholderTextColor={colors.tabIconDefault}
+                          value={categorySearch}
+                          onChangeText={setCategorySearch}
+                          autoFocus
+                        />
+                        {categorySearch ? (
+                          <Pressable
+                            onPress={() => setCategorySearch("")}
+                            style={({ pressed }) => [
+                              styles.clearButton,
+                              pressed && styles.pressed,
+                            ]}
+                            hitSlop={8}
+                          >
+                            <FontAwesome name="times-circle" size={20} color={colors.tabIconDefault} />
+                          </Pressable>
+                        ) : null}
+                      </View>
                     </View>
                     <ScrollView
                       style={styles.categoryScroll}
@@ -415,6 +452,20 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     maxHeight: 200,
   },
+  dueDayModalContent: {
+    borderRadius: 12,
+    maxHeight: 400,
+    overflow: "hidden",
+    padding: 12,
+  },
+  dueDayModalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  dueDayScroll: {
+    maxHeight: 320,
+  },
   categoryModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -432,7 +483,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(128,128,128,0.2)",
   },
+  categoryModalSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   categorySearchInput: {
+    flex: 1,
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,

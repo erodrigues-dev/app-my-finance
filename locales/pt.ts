@@ -102,6 +102,9 @@ export const pt = {
   noFixedExpensesList: "Nenhum gasto fixo. Adicione um e use \"Importar\" para lançar no mês.",
   fixedExpensesSyncFeedback: "gasto(s) sincronizado(s) para",
   selectMonthToImport: "Selecionar mês para importar",
+  deleteFixedExpense: "Excluir gasto fixo",
+  deleteFixedExpenseConfirmTitle: "Excluir gasto fixo",
+  deleteFixedExpenseConfirmMessage: "Tem certeza? As transações já lançadas permanecerão como transações normais.",
 
   // Month selector
   monthPickerTitle: "Selecionar mês",

@@ -83,6 +83,8 @@ export function TransactionForm({
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
 
+  const closeCategoryPicker = () => setShowCategoryPicker(false);
+
   const filteredCategories = categories.filter((cat) =>
     cat.name.toLowerCase().includes(categorySearch.toLowerCase().trim())
   );
@@ -216,25 +218,26 @@ export function TransactionForm({
               },
             ]}
           >
-            <TextInput
-              key={`cat-${categoryId}`}
-              style={[styles.categoryTextInput, { color: colors.text }]}
-              placeholder={pt.categorySearchPlaceholder}
-              placeholderTextColor={colors.tabIconDefault}
-              value={showCategoryPicker ? categorySearch : (selectedCategory?.name ?? "")}
-              onChangeText={(t) => {
-                setCategorySearch(t);
-                setShowCategoryPicker(true);
-              }}
-              onFocus={() => {
+            <Pressable
+              style={styles.categoryTextInput}
+              onPress={() => {
                 setShowCategoryPicker(true);
                 setCategorySearch(selectedCategory?.name ?? "");
               }}
-              onBlur={() => {
-                setTimeout(() => setShowCategoryPicker(false), 250);
-              }}
-            />
-            {(showCategoryPicker ? categorySearch : selectedCategory?.name) ? (
+            >
+              <Text
+                style={[
+                  { fontSize: 16 },
+                  selectedCategory?.name
+                    ? { color: colors.text }
+                    : { color: colors.tabIconDefault },
+                ]}
+                numberOfLines={1}
+              >
+                {selectedCategory?.name ?? pt.categorySearchPlaceholder}
+              </Text>
+            </Pressable>
+            {selectedCategory?.name ? (
               <Pressable
                 onPress={() => {
                   setCategoryId(null);
@@ -255,11 +258,11 @@ export function TransactionForm({
             visible={showCategoryPicker}
             transparent
             animationType="fade"
-            onRequestClose={() => setShowCategoryPicker(false)}
+            onRequestClose={closeCategoryPicker}
           >
             <Pressable
               style={styles.categoryModalOverlay}
-              onPress={() => setShowCategoryPicker(false)}
+              onPress={closeCategoryPicker}
             >
               <Pressable
                 style={[
@@ -269,21 +272,35 @@ export function TransactionForm({
                 onPress={(e) => e.stopPropagation()}
               >
                 <View style={styles.categoryModalSearch}>
-                  <TextInput
-                    style={[
-                      styles.categorySearchInput,
-                      {
-                        backgroundColor: colors.background,
-                        color: colors.text,
-                        borderColor: colors.tabIconDefault,
-                      },
-                    ]}
-                    placeholder={pt.categorySearchPlaceholder}
-                    placeholderTextColor={colors.tabIconDefault}
-                    value={categorySearch}
-                    onChangeText={setCategorySearch}
-                    autoFocus
-                  />
+                  <View style={styles.categoryModalSearchRow}>
+                    <TextInput
+                      style={[
+                        styles.categorySearchInput,
+                        {
+                          backgroundColor: colors.background,
+                          color: colors.text,
+                          borderColor: colors.tabIconDefault,
+                        },
+                      ]}
+                      placeholder={pt.categorySearchPlaceholder}
+                      placeholderTextColor={colors.tabIconDefault}
+                      value={categorySearch}
+                      onChangeText={setCategorySearch}
+                      autoFocus
+                    />
+                    {categorySearch ? (
+                      <Pressable
+                        onPress={() => setCategorySearch("")}
+                        style={({ pressed }) => [
+                          styles.clearButton,
+                          pressed && styles.pressed,
+                        ]}
+                        hitSlop={8}
+                      >
+                        <FontAwesome name="times-circle" size={20} color={colors.tabIconDefault} />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
                 <ScrollView
                   style={styles.categoryScroll}
@@ -444,7 +461,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(128,128,128,0.2)",
   },
+  categoryModalSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   categorySearchInput: {
+    flex: 1,
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
