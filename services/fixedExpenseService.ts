@@ -95,7 +95,16 @@ export function updateFixedExpense(
 
 export function deleteFixedExpense(id: number): void {
   const db = getDb();
-  db.runSync("UPDATE transactions SET fixed_expense_id = NULL WHERE fixed_expense_id = ?", id);
+  // Pagamento efetuado: desvincula o gasto fixo (mantém a transação)
+  db.runSync(
+    "UPDATE transactions SET fixed_expense_id = NULL WHERE fixed_expense_id = ? AND paid = 1",
+    id
+  );
+  // Pagamento pendente: exclui a transação
+  db.runSync(
+    "DELETE FROM transactions WHERE fixed_expense_id = ? AND (paid = 0 OR paid IS NULL)",
+    id
+  );
   db.runSync("DELETE FROM fixed_expenses WHERE id = ?", id);
 }
 
