@@ -100,6 +100,7 @@ export const pt = {
   dueDay: "Dia do vencimento",
   paid: "Pago",
   noFixedExpensesList: "Nenhum gasto fixo. Adicione um e use \"Importar\" para lançar no mês.",
+  totalFixedExpenses: "Total",
   fixedExpensesSyncFeedback: "gasto(s) sincronizado(s) para",
   selectMonthToImport: "Selecionar mês para importar",
   deleteFixedExpense: "Excluir gasto fixo",

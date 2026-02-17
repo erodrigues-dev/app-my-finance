@@ -100,6 +100,11 @@ export default function FixedExpensesScreen() {
 
   const months = useMemo(() => getMonthsForImport(), []);
 
+  const totalAmount = useMemo(
+    () => list.reduce((sum, item) => sum + item.amount, 0),
+    [list]
+  );
+
   const handleImportMonth = (month: number, year: number) => {
     setImportModalVisible(false);
     const { created, updated } = importFixedExpensesToMonth(month, year);
@@ -147,9 +152,16 @@ export default function FixedExpensesScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          {pt.fixedExpenses}
-        </Text>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            {pt.fixedExpenses}
+          </Text>
+          {list.length > 0 && (
+            <Text style={[styles.totalAmount, { color: colors.expense }]}>
+              {pt.totalFixedExpenses}: {formatCurrency(totalAmount)}
+            </Text>
+          )}
+        </View>
         {list.length === 0 ? (
           <Text style={[styles.empty, { color: colors.tabIconDefault }]}>
             {pt.noFixedExpensesList}
@@ -249,11 +261,15 @@ const styles = StyleSheet.create({
   secondaryButtonText: { fontSize: 15, fontWeight: "700" },
   pressed: { opacity: 0.9 },
   section: { marginBottom: 24 },
+  sectionHeader: { marginHorizontal: 16, marginBottom: 12 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginHorizontal: 16,
-    marginBottom: 12,
+  },
+  totalAmount: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: 4,
   },
   empty: { marginHorizontal: 16, fontSize: 15 },
   row: {

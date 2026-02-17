@@ -120,19 +120,6 @@ export default function ChartsScreen() {
                   },
                 ]}
               />
-              {[25, 50, 75].map((pct) => (
-                <View
-                  key={pct}
-                  style={[
-                    styles.totalsBarSeparator,
-                    currentWeekSeparator === pct && styles.barSeparatorCurrent,
-                    {
-                      left: `${pct}%`,
-                      backgroundColor: currentWeekSeparator === pct ? colors.tint : colors.text + "40",
-                    },
-                  ]}
-                />
-              ))}
             </View>
             <Text style={[styles.totalsValue, { color: colors.income }]}>
               {formatCurrency(income)}
@@ -152,19 +139,6 @@ export default function ChartsScreen() {
                   },
                 ]}
               />
-              {[25, 50, 75].map((pct) => (
-                <View
-                  key={pct}
-                  style={[
-                    styles.totalsBarSeparator,
-                    currentWeekSeparator === pct && styles.barSeparatorCurrent,
-                    {
-                      left: `${pct}%`,
-                      backgroundColor: currentWeekSeparator === pct ? colors.tint : colors.text + "40",
-                    },
-                  ]}
-                />
-              ))}
             </View>
             <Text
               style={[

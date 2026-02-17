@@ -128,30 +128,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {categoriesOverLimit.length > 0 && (
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {pt.categoriesOverLimit}
-          </Text>
-          {categoriesOverLimit.map((c) => (
-            <View
-              key={c.categoryId}
-              style={[
-                styles.overLimitCard,
-                { backgroundColor: colors.theme.warning + "20" },
-              ]}
-            >
-              <Text style={[styles.overLimitName, { color: colors.text }]}>
-                {c.categoryName}
-              </Text>
-              <Text style={[styles.overLimitAmount, { color: colors.theme.warning }]}>
-                {formatCurrency(c.spent)} / {formatCurrency(c.limit ?? 0)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
       <View style={styles.actionButtons}>
         <Pressable
           onPress={() => router.push("/add-income")}
@@ -176,6 +152,30 @@ export default function HomeScreen() {
           <Text style={styles.actionButtonText}>{pt.addExpense}</Text>
         </Pressable>
       </View>
+
+      {categoriesOverLimit.length > 0 && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, styles.sectionTitlePadded, { color: colors.text }]}>
+            {pt.categoriesOverLimit}
+          </Text>
+          {categoriesOverLimit.map((c) => (
+            <View
+              key={c.categoryId}
+              style={[
+                styles.overLimitCard,
+                { backgroundColor: colors.theme.warning + "20" },
+              ]}
+            >
+              <Text style={[styles.overLimitName, { color: colors.text }]}>
+                {c.categoryName}
+              </Text>
+              <Text style={[styles.overLimitAmount, { color: colors.theme.warning }]}>
+                {formatCurrency(c.spent)} / {formatCurrency(c.limit ?? 0)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={styles.section}>
         <Pressable
@@ -292,6 +292,10 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
+  },
+  sectionTitlePadded: {
+    marginHorizontal: 16,
+    marginBottom: 12,
   },
   overLimitCard: {
     marginHorizontal: 16,
