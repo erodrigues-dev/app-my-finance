@@ -8,6 +8,8 @@
     "android:release": "expo run:android --variant release",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "apk:release": "cd android && ./gradlew assembleRelease",
+    "apk:finder": "open ./android/app/build/outputs/apk/release/",
     "apk:install": "adb install android/app/build/outputs/apk/release/app-release.apk"
   },
   "dependencies": {
