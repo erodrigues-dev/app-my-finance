@@ -23,6 +23,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
       if (stored && (stored === "light" || stored === "dark" || stored === "system")) {
         setThemeModeState(stored as ThemeMode);
+      } else {
+        setThemeModeState("system");
       }
       setLoaded(true);
     });
