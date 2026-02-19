@@ -1,27 +1,27 @@
-import React, { useMemo, useState } from "react";
+import { FixedExpenseListItem } from '@/components/FixedExpenseListItem';
+import { MonthSelector } from '@/components/MonthSelector';
+import { TransactionListItem } from '@/components/TransactionListItem';
+import { useMonth } from '@/context/MonthContext';
+import { useValuesVisibility } from '@/context/ValuesVisibilityContext';
+import { useThemeColors } from '@/hooks/useThemeColors';
+import { pt } from '@/locales/pt';
 import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  RefreshControl,
-} from "react-native";
-import { useRouter, useFocusEffect } from "expo-router";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useThemeColors } from "@/hooks/useThemeColors";
-import { useMonth } from "@/context/MonthContext";
-import { MonthSelector } from "@/components/MonthSelector";
-import { TransactionListItem } from "@/components/TransactionListItem";
-import { pt } from "@/locales/pt";
-import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
-import {
-  getTransactionsByMonth,
-  getMonthlyTotals,
   getCategorySpendingByMonth,
+  getMonthlyTotals,
+  getTransactionsByMonth,
   updateTransactionPaid,
-} from "@/services/transactionService";
-import { FixedExpenseListItem } from "@/components/FixedExpenseListItem";
+} from '@/services/transactionService';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -36,25 +36,25 @@ export default function HomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       setRefreshKey((k) => k + 1);
-    }, [])
+    }, []),
   );
 
   const { income, expense, balance } = useMemo(
     () => getMonthlyTotals(selectedMonth.month, selectedMonth.year),
-    [selectedMonth, refreshKey]
+    [selectedMonth, refreshKey],
   );
 
   const allTransactions = useMemo(
     () => getTransactionsByMonth(selectedMonth.month, selectedMonth.year),
-    [selectedMonth, refreshKey]
+    [selectedMonth, refreshKey],
   );
 
   const regularTransactions = useMemo(() => {
     const list = allTransactions.filter((t) => t.fixed_expense_id == null);
     return [...list].sort((a, b) => {
-      const dateCmp = (b.date || "").localeCompare(a.date || "");
+      const dateCmp = (b.date || '').localeCompare(a.date || '');
       if (dateCmp !== 0) return dateCmp;
-      return (a.category_name || "").localeCompare(b.category_name || "");
+      return (a.category_name || '').localeCompare(b.category_name || '');
     });
   }, [allTransactions]);
 
@@ -63,9 +63,9 @@ export default function HomeScreen() {
     return [...list].sort((a, b) => {
       const paidCmp = (a.paid ?? 0) - (b.paid ?? 0);
       if (paidCmp !== 0) return paidCmp;
-      const dateCmp = (a.date || "").localeCompare(b.date || "");
+      const dateCmp = (a.date || '').localeCompare(b.date || '');
       if (dateCmp !== 0) return dateCmp;
-      return (a.category_name || "").localeCompare(b.category_name || "");
+      return (a.category_name || '').localeCompare(b.category_name || '');
     });
   }, [allTransactions]);
 
@@ -77,7 +77,7 @@ export default function HomeScreen() {
   const categoriesOverLimit = useMemo(() => {
     const spending = getCategorySpendingByMonth(
       selectedMonth.month,
-      selectedMonth.year
+      selectedMonth.year,
     );
     return spending.filter((c) => c.limit != null && c.spent > (c.limit ?? 0));
   }, [selectedMonth, refreshKey]);
@@ -130,32 +130,38 @@ export default function HomeScreen() {
 
       <View style={styles.actionButtons}>
         <Pressable
-          onPress={() => router.push("/add-income")}
-          style={({ pressed }) => [
-            styles.actionButton,
-            { backgroundColor: colors.incomeButton },
-            pressed && styles.pressed,
-          ]}
-        >
-          <FontAwesome name="arrow-down" size={18} color="#fff" />
-          <Text style={styles.actionButtonText}>{pt.addIncome}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push("/add-expense")}
+          onPress={() => router.push('/add-expense')}
           style={({ pressed }) => [
             styles.actionButton,
             { backgroundColor: colors.expenseButton },
             pressed && styles.pressed,
           ]}
         >
-          <FontAwesome name="arrow-up" size={18} color="#fff" />
+          <FontAwesome name='arrow-up' size={18} color='#fff' />
           <Text style={styles.actionButtonText}>{pt.addExpense}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/add-income')}
+          style={({ pressed }) => [
+            styles.actionButton,
+            { backgroundColor: colors.incomeButton },
+            pressed && styles.pressed,
+          ]}
+        >
+          <FontAwesome name='arrow-down' size={18} color='#fff' />
+          <Text style={styles.actionButtonText}>{pt.addIncome}</Text>
         </Pressable>
       </View>
 
       {categoriesOverLimit.length > 0 && (
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, styles.sectionTitlePadded, { color: colors.text }]}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              styles.sectionTitlePadded,
+              { color: colors.text },
+            ]}
+          >
             {pt.categoriesOverLimit}
           </Text>
           {categoriesOverLimit.map((c) => (
@@ -163,13 +169,18 @@ export default function HomeScreen() {
               key={c.categoryId}
               style={[
                 styles.overLimitCard,
-                { backgroundColor: colors.theme.warning + "20" },
+                { backgroundColor: colors.theme.warning + '20' },
               ]}
             >
               <Text style={[styles.overLimitName, { color: colors.text }]}>
                 {c.categoryName}
               </Text>
-              <Text style={[styles.overLimitAmount, { color: colors.theme.warning }]}>
+              <Text
+                style={[
+                  styles.overLimitAmount,
+                  { color: colors.theme.warning },
+                ]}
+              >
                 {formatCurrency(c.spent)} / {formatCurrency(c.limit ?? 0)}
               </Text>
             </View>
@@ -189,7 +200,7 @@ export default function HomeScreen() {
             {pt.transactions}
           </Text>
           <FontAwesome
-            name={transactionsExpanded ? "chevron-down" : "chevron-right"}
+            name={transactionsExpanded ? 'chevron-down' : 'chevron-right'}
             size={18}
             color={colors.tabIconDefault}
           />
@@ -197,7 +208,9 @@ export default function HomeScreen() {
         {transactionsExpanded && (
           <>
             {regularTransactions.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+              <Text
+                style={[styles.emptyText, { color: colors.tabIconDefault }]}
+              >
                 {pt.noTransactions}
               </Text>
             ) : (
@@ -225,7 +238,7 @@ export default function HomeScreen() {
             {pt.fixedExpenses}
           </Text>
           <FontAwesome
-            name={fixedExpensesExpanded ? "chevron-down" : "chevron-right"}
+            name={fixedExpensesExpanded ? 'chevron-down' : 'chevron-right'}
             size={18}
             color={colors.tabIconDefault}
           />
@@ -233,7 +246,9 @@ export default function HomeScreen() {
         {fixedExpensesExpanded && (
           <>
             {fixedExpenseTransactions.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+              <Text
+                style={[styles.emptyText, { color: colors.tabIconDefault }]}
+              >
                 {pt.noFixedExpenses}
               </Text>
             ) : (
@@ -258,7 +273,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardsRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     paddingHorizontal: 12,
     gap: 8,
     marginBottom: 16,
@@ -267,31 +282,31 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: 12,
-    alignItems: "center",
+    alignItems: 'center',
   },
   cardLabel: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: '600',
     marginBottom: 4,
   },
   cardValue: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   section: {
     marginBottom: 24,
   },
   sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginHorizontal: 16,
     marginBottom: 12,
     paddingVertical: 4,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   sectionTitlePadded: {
     marginHorizontal: 16,
@@ -302,37 +317,37 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     padding: 12,
     borderRadius: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   overLimitName: {
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   overLimitAmount: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   actionButtons: {
-    flexDirection: "row",
+    flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 12,
     marginBottom: 24,
   },
   actionButton: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 14,
     borderRadius: 12,
     gap: 8,
   },
   actionButtonText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   pressed: {
     opacity: 0.9,
