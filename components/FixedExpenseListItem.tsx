@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
-import { formatDateShort } from "@/utils/dateUtils";
+import { formatDateShort, getDueDateHighlightStatus } from "@/utils/dateUtils";
 import type { TransactionWithCategory } from "@/types";
 
 interface Props {
@@ -20,6 +20,13 @@ export function FixedExpenseListItem({
   const colors = useThemeColors();
   const { formatCurrency } = useValuesVisibility();
   const paid = transaction.paid === 1;
+  const dueDateStatus = getDueDateHighlightStatus(transaction.date, transaction.paid);
+  const dueDateColor =
+    dueDateStatus === "danger"
+      ? colors.expense
+      : dueDateStatus === "warning"
+      ? colors.theme.warning
+      : colors.tabIconDefault;
 
   const handleCheckboxPress = () => {
     onTogglePaid(transaction.id, paid ? 0 : 1);
@@ -59,7 +66,9 @@ export function FixedExpenseListItem({
             style={[styles.meta, { color: colors.tabIconDefault }]}
             numberOfLines={1}
           >
-            {formatDateShort(transaction.date)}
+            <Text style={{ color: dueDateColor }}>
+              {formatDateShort(transaction.date)}
+            </Text>
             {transaction.category_name ? ` · ${transaction.category_name}` : ""}
           </Text>
         </View>

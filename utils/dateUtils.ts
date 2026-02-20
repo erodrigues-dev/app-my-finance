@@ -1,5 +1,6 @@
 import {
   addMonths,
+  differenceInCalendarDays,
   format,
   getDaysInMonth,
   isAfter,
@@ -65,6 +66,23 @@ export function formatDateShort(dateStr: string): string {
     return format(d, DATE_DISPLAY_FORMAT);
   } catch {
     return dateStr;
+  }
+}
+
+export function getDueDateHighlightStatus(
+  dateStr: string,
+  paid?: number | null
+): "warning" | "danger" | null {
+  if ((paid ?? 0) === 1) return null;
+  try {
+    const dueDate = startOfDay(parseISO(dateStr));
+    const today = startOfDay(new Date());
+    const daysUntilDue = differenceInCalendarDays(dueDate, today);
+    if (daysUntilDue <= 0) return "danger";
+    if (daysUntilDue <= 7) return "warning";
+    return null;
+  } catch {
+    return null;
   }
 }
 
