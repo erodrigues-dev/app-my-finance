@@ -1,5 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,21 @@ export default function LoginScreen() {
   const colors = useThemeColors();
   const { authenticate, isBiometricAvailable } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === "web" || isBiometricAvailable !== true) return;
+    let cancelled = false;
+    setLoading(true);
+    authenticate()
+      .then(() => { if (cancelled) return; })
+      .catch(() => {
+        if (!cancelled) Alert.alert(pt.biometricTitle, pt.biometricNotEnrolled);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [authenticate, isBiometricAvailable]);
 
   const handleAuthenticate = async () => {
     if (Platform.OS === "web") {
