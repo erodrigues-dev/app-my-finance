@@ -35,12 +35,14 @@ interface Props {
   initialDate?: string;
   initialCategoryId?: number | null;
   initialNote?: string | null;
+  enableInstallments?: boolean;
   onSubmit: (data: {
     name: string;
     amount: number;
     date: string;
     categoryId: number | null;
     note: string | null;
+    installmentsCount?: number;
   }) => void;
 }
 
@@ -60,6 +62,7 @@ export function TransactionForm({
   initialDate,
   initialCategoryId,
   initialNote = "",
+  enableInstallments = false,
   onSubmit,
 }: Props) {
   const colors = useThemeColors();
@@ -85,6 +88,8 @@ export function TransactionForm({
   const [addAmountStr, setAddAmountStr] = useState("");
   const addAmountInputRef = useRef<TextInput>(null);
   const [categorySearch, setCategorySearch] = useState("");
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentsCountStr, setInstallmentsCountStr] = useState("2");
 
   const closeCategoryPicker = () => setShowCategoryPicker(false);
   const closeAddAmountModal = () => {
@@ -124,12 +129,23 @@ export function TransactionForm({
       return;
     }
 
+    let installmentsCount = 1;
+    if (enableInstallments && isInstallment) {
+      const parsedInstallments = parseInt(installmentsCountStr, 10);
+      if (isNaN(parsedInstallments) || parsedInstallments < 2) {
+        Alert.alert("Erro", pt.installmentsCountInvalid);
+        return;
+      }
+      installmentsCount = parsedInstallments;
+    }
+
     onSubmit({
       name: name.trim() || (type === "income" ? "Entrada" : "Despesa"),
       amount,
       date: formatDateForDb(date),
       categoryId: type === "expense" ? categoryId : null,
       note: note.trim() || null,
+      installmentsCount,
     });
   };
 
@@ -153,6 +169,12 @@ export function TransactionForm({
     closeAddAmountModal();
   };
 
+  const handleIncrementInstallments = () => {
+    const current = parseInt(installmentsCountStr, 10);
+    const next = isNaN(current) ? 2 : Math.max(2, current + 1);
+    setInstallmentsCountStr(String(next));
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -166,25 +188,25 @@ export function TransactionForm({
           keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
-      {type === "expense" && (
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>Nome *</Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.theme.card,
-                color: colors.text,
-                borderColor: colors.tabIconDefault,
-              },
-            ]}
-            placeholder="Ex: Supermercado"
-            placeholderTextColor={colors.tabIconDefault}
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
-      )}
+      <View style={styles.field}>
+        <Text style={[styles.label, { color: colors.text }]}>
+          {type === "expense" ? "Nome *" : "Nome"}
+        </Text>
+        <TextInput
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.theme.card,
+              color: colors.text,
+              borderColor: colors.tabIconDefault,
+            },
+          ]}
+          placeholder={pt.namePlaceholder}
+          placeholderTextColor={colors.tabIconDefault}
+          value={name}
+          onChangeText={setName}
+        />
+      </View>
 
       <View style={styles.field}>
         <Text style={[styles.label, { color: colors.text }]}>Valor *</Text>
@@ -314,6 +336,75 @@ export function TransactionForm({
           />
         )}
       </View>
+
+      {enableInstallments && (
+        <View style={styles.field}>
+          <Pressable
+            onPress={() => setIsInstallment((prev) => !prev)}
+            style={({ pressed }) => [
+              styles.installmentToggle,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View
+              style={[
+                styles.checkbox,
+                {
+                  borderColor: colors.tabIconDefault,
+                  backgroundColor:
+                    isInstallment
+                      ? (type === "income" ? colors.income : colors.expense) + "40"
+                      : "transparent",
+                },
+              ]}
+            >
+              {isInstallment ? (
+                <FontAwesome
+                  name="check"
+                  size={12}
+                  color={type === "income" ? colors.income : colors.expense}
+                />
+              ) : null}
+            </View>
+            <Text style={{ color: colors.text, fontSize: 16, fontWeight: "600" }}>
+              {pt.installment}
+            </Text>
+          </Pressable>
+
+          {isInstallment && (
+            <View style={styles.installmentsField}>
+              <Text style={[styles.label, { color: colors.text }]}>{pt.installmentsCount}</Text>
+              <View
+                style={[
+                  styles.input,
+                  styles.installmentsInputRow,
+                  {
+                    backgroundColor: colors.theme.card,
+                    borderColor: colors.tabIconDefault,
+                  },
+                ]}
+              >
+                <TextInput
+                  style={[styles.installmentsTextInput, { color: colors.text }]}
+                  placeholder={pt.installmentsCountPlaceholder}
+                  placeholderTextColor={colors.tabIconDefault}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  value={installmentsCountStr}
+                  onChangeText={(t) => setInstallmentsCountStr(t.replace(/\D/g, ""))}
+                />
+                <Pressable
+                  onPress={handleIncrementInstallments}
+                  style={({ pressed }) => [styles.installmentsAddButton, pressed && styles.pressed]}
+                  hitSlop={8}
+                >
+                  <FontAwesome name="plus-circle" size={22} color={colors.income} />
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       {type === "expense" && categories.length > 0 && (
         <View style={styles.field}>
@@ -537,6 +628,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   addAmountIconButton: {
+    padding: 6,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  installmentToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  installmentsField: {
+    marginTop: 12,
+  },
+  installmentsInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 0,
+    paddingRight: 8,
+  },
+  installmentsTextInput: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingLeft: 14,
+    paddingRight: 8,
+    fontSize: 16,
+  },
+  installmentsAddButton: {
     padding: 6,
   },
   categoryInputRow: {

@@ -1,6 +1,7 @@
 import { getDb } from "@/database/init";
-import { getMonthRange, getWeeksInMonth } from "@/utils/dateUtils";
+import { formatDateStr, getMonthRange, getWeeksInMonth, isDateInFutureMonth, parseDateStr } from "@/utils/dateUtils";
 import type { Transaction, TransactionType, TransactionWithCategory } from "@/types";
+import { addMonths } from "date-fns";
 
 export type MonthYear = { month: number; year: number };
 
@@ -12,6 +13,7 @@ export type CreateTransactionParams = {
   categoryId: number | null;
   note: string | null;
   fixedExpenseId?: number | null;
+  installmentGroupId?: number | null;
   paid?: number;
   planned?: number;
 };
@@ -25,6 +27,7 @@ export type UpdateTransactionParams = {
   categoryId: number | null;
   note: string | null;
   fixedExpenseId?: number | null;
+  installmentGroupId?: number | null;
   paid?: number;
   planned?: number;
 };
@@ -42,13 +45,14 @@ export function getTransactionsByMonth({ month, year }: MonthYear): TransactionW
     category_id: number | null;
     note: string | null;
     fixed_expense_id: number | null;
+    installment_group_id: number | null;
     paid: number | null;
     planned: number | null;
     category_name: string | null;
     category_color: string | null;
   }>(
     `SELECT t.id, t.type, t.name, t.amount, t.date, t.category_id, t.note,
-            t.fixed_expense_id, t.paid, t.planned,
+            t.fixed_expense_id, t.installment_group_id, t.paid, t.planned,
             c.name as category_name, c.color as category_color
      FROM transactions t
      LEFT JOIN categories c ON t.category_id = c.id
@@ -67,6 +71,7 @@ export function getTransactionsByMonth({ month, year }: MonthYear): TransactionW
     category_id: r.category_id,
     note: r.note,
     fixed_expense_id: r.fixed_expense_id ?? undefined,
+    installment_group_id: r.installment_group_id ?? undefined,
     paid: r.paid ?? 0,
     planned: r.planned ?? 0,
     category_name: r.category_name ?? undefined,
@@ -85,14 +90,16 @@ export function getTransactionById(id: number): Transaction | null {
     category_id: number | null;
     note: string | null;
     fixed_expense_id: number | null;
+    installment_group_id: number | null;
     paid: number | null;
     planned: number | null;
-  }>("SELECT id, type, name, amount, date, category_id, note, fixed_expense_id, paid, planned FROM transactions WHERE id = ?", id);
+  }>("SELECT id, type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned FROM transactions WHERE id = ?", id);
   if (!row) return null;
   return {
     ...row,
     type: row.type as TransactionType,
     fixed_expense_id: row.fixed_expense_id ?? undefined,
+    installment_group_id: row.installment_group_id ?? undefined,
     paid: row.paid ?? 0,
     planned: row.planned ?? 0,
   };
@@ -106,12 +113,13 @@ export function createTransaction({
   categoryId,
   note,
   fixedExpenseId,
+  installmentGroupId,
   paid,
   planned,
 }: CreateTransactionParams): number {
   const db = getDb();
   const result = db.runSync(
-    "INSERT INTO transactions (type, name, amount, date, category_id, note, fixed_expense_id, paid, planned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO transactions (type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     type,
     name,
     amount,
@@ -119,6 +127,7 @@ export function createTransaction({
     categoryId,
     note ?? null,
     fixedExpenseId ?? null,
+    installmentGroupId ?? null,
     paid ?? 0,
     planned ?? 0
   );
@@ -134,12 +143,13 @@ export function updateTransaction({
   categoryId,
   note,
   fixedExpenseId,
+  installmentGroupId,
   paid,
   planned,
 }: UpdateTransactionParams): void {
   const db = getDb();
   db.runSync(
-    "UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ?, fixed_expense_id = ?, paid = ?, planned = ? WHERE id = ?",
+    "UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ?, fixed_expense_id = ?, installment_group_id = ?, paid = ?, planned = ? WHERE id = ?",
     type,
     name,
     amount,
@@ -147,10 +157,136 @@ export function updateTransaction({
     categoryId,
     note ?? null,
     fixedExpenseId ?? null,
+    installmentGroupId ?? null,
     paid ?? 0,
     planned ?? 0,
     id
   );
+}
+
+export function updateTransactionInstallmentGroup({
+  id,
+  installmentGroupId,
+}: {
+  id: number;
+  installmentGroupId: number | null;
+}): void {
+  const db = getDb();
+  db.runSync(
+    "UPDATE transactions SET installment_group_id = ? WHERE id = ?",
+    installmentGroupId,
+    id
+  );
+}
+
+export function getInstallmentGroupTransactions(groupId: number): Transaction[] {
+  const db = getDb();
+  const rows = db.getAllSync<{
+    id: number;
+    type: string;
+    name: string;
+    amount: number;
+    date: string;
+    category_id: number | null;
+    note: string | null;
+    fixed_expense_id: number | null;
+    installment_group_id: number | null;
+    paid: number | null;
+    planned: number | null;
+  }>(
+    `SELECT id, type, name, amount, date, category_id, note,
+            fixed_expense_id, installment_group_id, paid, planned
+     FROM transactions
+     WHERE installment_group_id = ?
+     ORDER BY date ASC, id ASC`,
+    groupId
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    type: row.type as TransactionType,
+    fixed_expense_id: row.fixed_expense_id ?? undefined,
+    installment_group_id: row.installment_group_id ?? undefined,
+    paid: row.paid ?? 0,
+    planned: row.planned ?? 0,
+  }));
+}
+
+export function updateFutureInstallmentsFromAnchor({
+  groupId,
+  anchorId,
+  anchorDate,
+  baseName,
+  amount,
+  categoryId,
+  note,
+}: {
+  groupId: number;
+  anchorId: number;
+  anchorDate: string;
+  baseName: string;
+  amount: number;
+  categoryId: number | null;
+  note: string | null;
+}): void {
+  const groupTransactions = getInstallmentGroupTransactions(groupId);
+  const anchorIndex = groupTransactions.findIndex((tx) => tx.id === anchorId);
+  if (anchorIndex < 0) return;
+
+  const todayStr = formatDateStr(new Date());
+  const anchorDateObj = parseDateStr(anchorDate);
+  const totalInstallments = groupTransactions.length;
+  let monthOffset = 1;
+
+  for (let i = anchorIndex + 1; i < groupTransactions.length; i += 1) {
+    const tx = groupTransactions[i];
+    if ((tx.date ?? "") <= todayStr) continue;
+
+    const recalculatedDate = formatDateStr(addMonths(anchorDateObj, monthOffset));
+    const recalculatedPlanned = isDateInFutureMonth(recalculatedDate) ? 1 : 0;
+    const recalculatedName = `${baseName} (${i + 1}/${totalInstallments})`;
+
+    updateTransaction({
+      id: tx.id,
+      type: tx.type,
+      name: recalculatedName,
+      amount,
+      date: recalculatedDate,
+      categoryId,
+      note,
+      fixedExpenseId: tx.fixed_expense_id ?? undefined,
+      installmentGroupId: groupId,
+      paid: tx.paid ?? 0,
+      planned: recalculatedPlanned,
+    });
+    monthOffset += 1;
+  }
+}
+
+export function deleteInstallmentsFromAnchor({
+  groupId,
+  anchorId,
+}: {
+  groupId: number;
+  anchorId: number;
+}): void {
+  const groupTransactions = getInstallmentGroupTransactions(groupId);
+  const anchorIndex = groupTransactions.findIndex((tx) => tx.id === anchorId);
+  if (anchorIndex < 0) {
+    deleteTransaction(anchorId);
+    return;
+  }
+
+  const todayStr = formatDateStr(new Date());
+  for (let i = anchorIndex; i < groupTransactions.length; i += 1) {
+    const tx = groupTransactions[i];
+    const shouldDeleteCurrent = tx.id === anchorId;
+    const shouldDeleteFutureUnpaid =
+      (tx.date ?? "") > todayStr && (tx.paid ?? 0) !== 1;
+    if (shouldDeleteCurrent || shouldDeleteFutureUnpaid) {
+      deleteTransaction(tx.id);
+    }
+  }
 }
 
 export function updateTransactionPaid({ id, paid }: { id: number; paid: number }): void {

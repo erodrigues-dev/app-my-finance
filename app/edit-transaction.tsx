@@ -7,7 +7,10 @@ import { useThemeColors } from "@/hooks/useThemeColors";
 import { useMonth } from "@/context/MonthContext";
 import { useToast } from "@/context/ToastContext";
 import {
+  deleteInstallmentsFromAnchor,
   getTransactionById,
+  getInstallmentGroupTransactions,
+  updateFutureInstallmentsFromAnchor,
   updateTransaction,
   deleteTransaction,
 } from "@/services/transactionService";
@@ -50,6 +53,19 @@ export default function EditTransactionScreen() {
     categoryId: number | null;
     note: string | null;
   }) => {
+    const installmentGroupId = transaction.installment_group_id ?? undefined;
+    const normalizedBaseName = data.name.trim().replace(/\s\(\d+\/\d+\)$/, "");
+    let normalizedCurrentName = data.name;
+    if (installmentGroupId != null) {
+      const groupTransactions = getInstallmentGroupTransactions(installmentGroupId);
+      const anchorIndex = groupTransactions.findIndex((tx) => tx.id === transaction.id);
+      if (anchorIndex >= 0) {
+        normalizedCurrentName = `${normalizedBaseName} (${anchorIndex + 1}/${groupTransactions.length})`;
+      } else {
+        normalizedCurrentName = normalizedBaseName;
+      }
+    }
+
     let planned: number;
     if (transaction.fixed_expense_id != null) {
       planned = 0;
@@ -61,15 +77,27 @@ export default function EditTransactionScreen() {
     updateTransaction({
       id: transaction.id,
       type: transaction.type,
-      name: data.name,
+      name: normalizedCurrentName,
       amount: data.amount,
       date: data.date,
       categoryId: data.categoryId,
       note: data.note,
       fixedExpenseId: transaction.fixed_expense_id ?? undefined,
+      installmentGroupId,
       paid: transaction.paid ?? 0,
       planned,
     });
+    if (installmentGroupId != null) {
+      updateFutureInstallmentsFromAnchor({
+        groupId: installmentGroupId,
+        anchorId: transaction.id,
+        anchorDate: data.date,
+        baseName: normalizedBaseName,
+        amount: data.amount,
+        categoryId: data.categoryId,
+        note: data.note,
+      });
+    }
     const { month, year } = getMonthYearFromDateStr(data.date);
     if (year !== selectedMonth.year || month !== selectedMonth.month) {
       showToast({
@@ -89,22 +117,34 @@ export default function EditTransactionScreen() {
   };
 
   const handleDelete = () => {
+    const shouldDeleteInstallments = transaction.installment_group_id != null;
     Alert.alert(
       pt.deleteTransactionConfirmTitle,
-      pt.deleteTransactionConfirmMessage,
+      shouldDeleteInstallments
+        ? pt.deleteInstallmentTransactionConfirmMessage
+        : pt.deleteTransactionConfirmMessage,
       [
         { text: pt.cancel, style: "cancel" },
         {
           text: pt.delete,
           style: "destructive",
           onPress: () => {
-            deleteTransaction(transaction.id);
+            if (transaction.installment_group_id != null) {
+              deleteInstallmentsFromAnchor({
+                groupId: transaction.installment_group_id,
+                anchorId: transaction.id,
+              });
+            } else {
+              deleteTransaction(transaction.id);
+            }
             router.back();
           },
         },
       ]
     );
   };
+
+  const canDuplicate = transaction.installment_group_id == null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -119,18 +159,20 @@ export default function EditTransactionScreen() {
           initialNote={transaction.note}
           onSubmit={handleSubmit}
         />
-        <Pressable
-          onPress={handleDuplicate}
-          style={({ pressed }) => [
-            styles.duplicateButton,
-            { borderColor: colors.text },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={[styles.duplicateButtonText, { color: colors.text }]}>
-            {pt.duplicateTransaction}
-          </Text>
-        </Pressable>
+        {canDuplicate && (
+          <Pressable
+            onPress={handleDuplicate}
+            style={({ pressed }) => [
+              styles.duplicateButton,
+              { borderColor: colors.text },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.duplicateButtonText, { color: colors.text }]}>
+              {pt.duplicateTransaction}
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           onPress={handleDelete}
           style={({ pressed }) => [

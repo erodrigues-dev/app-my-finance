@@ -40,6 +40,10 @@ export const pt = {
   noCategoryFound: "Nenhuma categoria encontrada",
   note: "Observação",
   notePlaceholder: "Opcional",
+  installment: "Parcelado",
+  installmentsCount: "Qtd Parcelas",
+  installmentsCountPlaceholder: "Ex: 2",
+  installmentsCountInvalid: "Informe uma quantidade válida de parcelas (mínimo 2).",
   save: "Salvar",
   cancel: "Cancelar",
 
@@ -55,6 +59,8 @@ export const pt = {
   duplicateTransaction: "Duplicar",
   deleteTransactionConfirmTitle: "Excluir transação",
   deleteTransactionConfirmMessage: "Deseja excluir esta transação?",
+  deleteInstallmentTransactionConfirmMessage:
+    "Deseja excluir esta parcela e as próximas não pagas?",
   deleteColorTitle: "Excluir cor",
   deleteColorMessage: "Deseja excluir esta cor personalizada?",
   deleteColorInUseTitle: "Cor em uso",

@@ -25,6 +25,7 @@ export interface Transaction {
   category_id: number | null;
   note: string | null;
   fixed_expense_id?: number | null;
+  installment_group_id?: number | null;
   paid?: number;
   planned?: number;
 }

@@ -1,13 +1,24 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { addMonths } from "date-fns";
 import { TransactionForm } from "@/components/TransactionForm";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useMonth } from "@/context/MonthContext";
 import { useToast } from "@/context/ToastContext";
-import { createTransaction, getTransactionById } from "@/services/transactionService";
+import {
+  createTransaction,
+  getTransactionById,
+  updateTransactionInstallmentGroup,
+} from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
-import { getInitialDateForNewTransaction, getMonthYearFromDateStr, isDateInFutureMonth } from "@/utils/dateUtils";
+import {
+  formatDateStr,
+  getInitialDateForNewTransaction,
+  getMonthYearFromDateStr,
+  isDateInFutureMonth,
+  parseDateStr,
+} from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
 
 export default function AddIncomeScreen() {
@@ -31,17 +42,54 @@ export default function AddIncomeScreen() {
     date: string;
     categoryId: number | null;
     note: string | null;
+    installmentsCount?: number;
   }) => {
-    const planned = isDateInFutureMonth(data.date) ? 1 : 0;
-    createTransaction({
-      type: "income",
-      name: data.name,
-      amount: data.amount,
-      date: data.date,
-      categoryId: null,
-      note: data.note,
-      planned,
-    });
+    const installmentsCount = Math.max(1, data.installmentsCount ?? 1);
+    const baseDate = parseDateStr(data.date);
+    if (installmentsCount === 1) {
+      const planned = isDateInFutureMonth(data.date) ? 1 : 0;
+      createTransaction({
+        type: "income",
+        name: data.name,
+        amount: data.amount,
+        date: data.date,
+        categoryId: null,
+        note: data.note,
+        planned,
+      });
+    } else {
+      const firstName = `${data.name} (1/${installmentsCount})`;
+      const firstId = createTransaction({
+        type: "income",
+        name: firstName,
+        amount: data.amount,
+        date: data.date,
+        categoryId: null,
+        note: data.note,
+        planned: isDateInFutureMonth(data.date) ? 1 : 0,
+      });
+      updateTransactionInstallmentGroup({
+        id: firstId,
+        installmentGroupId: firstId,
+      });
+
+      for (let i = 1; i < installmentsCount; i += 1) {
+        const installmentDate = addMonths(baseDate, i);
+        const installmentDateStr = formatDateStr(installmentDate);
+        const installmentName = `${data.name} (${i + 1}/${installmentsCount})`;
+        const planned = isDateInFutureMonth(installmentDateStr) ? 1 : 0;
+        createTransaction({
+          type: "income",
+          name: installmentName,
+          amount: data.amount,
+          date: installmentDateStr,
+          categoryId: null,
+          note: data.note,
+          installmentGroupId: firstId,
+          planned,
+        });
+      }
+    }
     const { month, year } = getMonthYearFromDateStr(data.date);
     if (year !== selectedMonth.year || month !== selectedMonth.month) {
       showToast({
@@ -63,6 +111,7 @@ export default function AddIncomeScreen() {
         initialDate={duplicateSource?.date ?? getInitialDateForNewTransaction(selectedMonth)}
         initialCategoryId={duplicateSource?.category_id}
         initialNote={duplicateSource?.note}
+        enableInstallments
         onSubmit={handleSubmit}
       />
     </View>

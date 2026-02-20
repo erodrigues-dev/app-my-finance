@@ -32,4 +32,6 @@ export const migrations = [
   `ALTER TABLE transactions ADD COLUMN fixed_expense_id INTEGER REFERENCES fixed_expenses(id)`,
   `ALTER TABLE transactions ADD COLUMN paid INTEGER DEFAULT 0`,
   `ALTER TABLE transactions ADD COLUMN planned INTEGER DEFAULT 0`,
+  `ALTER TABLE transactions ADD COLUMN installment_group_id INTEGER`,
+  `CREATE INDEX IF NOT EXISTS idx_transactions_installment_group ON transactions(installment_group_id, date, id)`,
 ];
