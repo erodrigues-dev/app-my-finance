@@ -52,6 +52,7 @@ export const pt = {
   customColor: "Cor personalizada",
   delete: "Excluir",
   deleteTransaction: "Excluir transação",
+  duplicateTransaction: "Duplicar",
   deleteTransactionConfirmTitle: "Excluir transação",
   deleteTransactionConfirmMessage: "Deseja excluir esta transação?",
   deleteColorTitle: "Excluir cor",

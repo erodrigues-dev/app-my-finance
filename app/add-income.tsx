@@ -1,21 +1,29 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { TransactionForm } from "@/components/TransactionForm";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useMonth } from "@/context/MonthContext";
 import { useToast } from "@/context/ToastContext";
-import { createTransaction } from "@/services/transactionService";
+import { createTransaction, getTransactionById } from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
 import { getInitialDateForNewTransaction, getMonthYearFromDateStr, isDateInFutureMonth } from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
 
 export default function AddIncomeScreen() {
   const router = useRouter();
+  const { duplicateId } = useLocalSearchParams<{ duplicateId?: string }>();
   const colors = useThemeColors();
   const { selectedMonth } = useMonth();
   const { showToast } = useToast();
   const categories = getAllCategories();
+
+  const duplicateSource = duplicateId
+    ? (() => {
+        const tx = getTransactionById(parseInt(duplicateId, 10));
+        return tx && tx.type === "income" ? tx : null;
+      })()
+    : null;
 
   const handleSubmit = (data: {
     name: string;
@@ -47,9 +55,14 @@ export default function AddIncomeScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <TransactionForm
+        key={duplicateId ?? "new"}
         type="income"
         categories={categories}
-        initialDate={getInitialDateForNewTransaction(selectedMonth)}
+        initialName={duplicateSource?.name}
+        initialAmount={duplicateSource?.amount}
+        initialDate={duplicateSource?.date ?? getInitialDateForNewTransaction(selectedMonth)}
+        initialCategoryId={duplicateSource?.category_id}
+        initialNote={duplicateSource?.note}
         onSubmit={handleSubmit}
       />
     </View>

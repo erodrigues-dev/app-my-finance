@@ -80,6 +80,14 @@ export default function EditTransactionScreen() {
     router.back();
   };
 
+  const handleDuplicate = () => {
+    if (transaction.type === "income") {
+      router.push({ pathname: "/add-income", params: { duplicateId: String(transaction.id) } });
+    } else {
+      router.push({ pathname: "/add-expense", params: { duplicateId: String(transaction.id) } });
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert(
       pt.deleteTransactionConfirmTitle,
@@ -112,6 +120,18 @@ export default function EditTransactionScreen() {
           onSubmit={handleSubmit}
         />
         <Pressable
+          onPress={handleDuplicate}
+          style={({ pressed }) => [
+            styles.duplicateButton,
+            { borderColor: colors.text },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={[styles.duplicateButtonText, { color: colors.text }]}>
+            {pt.duplicateTransaction}
+          </Text>
+        </Pressable>
+        <Pressable
           onPress={handleDelete}
           style={({ pressed }) => [
             styles.deleteButton,
@@ -132,6 +152,15 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 32 },
+  duplicateButton: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: "center",
+  },
+  duplicateButtonText: { fontSize: 16, fontWeight: "700" },
   deleteButton: {
     marginHorizontal: 16,
     marginTop: 8,
