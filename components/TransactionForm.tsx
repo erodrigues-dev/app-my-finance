@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -63,11 +63,14 @@ export function TransactionForm({
   onSubmit,
 }: Props) {
   const colors = useThemeColors();
+  const formatAmountValue = (value: number) =>
+    value.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   const [name, setName] = useState(initialName);
   const [amountStr, setAmountStr] = useState(
-    initialAmount > 0
-      ? initialAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      : ""
+    initialAmount > 0 ? formatAmountValue(initialAmount) : ""
   );
   const [date, setDate] = useState(
     initialDate ? formatDateForInput(initialDate) : new Date()
@@ -78,9 +81,22 @@ export function TransactionForm({
   const [note, setNote] = useState(initialNote ?? "");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showAddAmountModal, setShowAddAmountModal] = useState(false);
+  const [addAmountStr, setAddAmountStr] = useState("");
+  const addAmountInputRef = useRef<TextInput>(null);
   const [categorySearch, setCategorySearch] = useState("");
 
   const closeCategoryPicker = () => setShowCategoryPicker(false);
+  const closeAddAmountModal = () => {
+    setShowAddAmountModal(false);
+    setAddAmountStr("");
+  };
+
+  const focusAddAmountInput = () => {
+    requestAnimationFrame(() => {
+      setTimeout(() => addAmountInputRef.current?.focus(), 120);
+    });
+  };
 
   const filteredCategories = categories.filter((cat) =>
     cat.name.toLowerCase().includes(categorySearch.toLowerCase().trim())
@@ -119,6 +135,24 @@ export function TransactionForm({
 
   const selectedCategory = categories.find((c) => c.id === categoryId);
 
+  useEffect(() => {
+    if (!showAddAmountModal) return;
+    focusAddAmountInput();
+  }, [showAddAmountModal]);
+
+  const handleAddAmount = () => {
+    const increment = parseCurrencyInput(addAmountStr);
+    if (isNaN(increment) || increment <= 0) {
+      Alert.alert("Erro", "Informe um valor válido para somar.");
+      return;
+    }
+    const currentAmount = parseCurrencyInput(amountStr);
+    const safeCurrentAmount = isNaN(currentAmount) ? 0 : currentAmount;
+    const nextAmount = safeCurrentAmount + increment;
+    setAmountStr(formatAmountValue(nextAmount));
+    closeAddAmountModal();
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -154,21 +188,100 @@ export function TransactionForm({
 
       <View style={styles.field}>
         <Text style={[styles.label, { color: colors.text }]}>Valor *</Text>
-        <TextInput
+        <View
           style={[
             styles.input,
+            styles.amountInputRow,
             {
               backgroundColor: colors.theme.card,
-              color: colors.text,
               borderColor: colors.tabIconDefault,
             },
           ]}
-          placeholder="0,00"
-          placeholderTextColor={colors.tabIconDefault}
-          keyboardType="numeric"
-          value={amountStr}
-          onChangeText={(t) => setAmountStr(formatCurrencyInput(t))}
-        />
+        >
+          <TextInput
+            style={[styles.amountTextInput, { color: colors.text }]}
+            placeholder="0,00"
+            placeholderTextColor={colors.tabIconDefault}
+            keyboardType="numeric"
+            value={amountStr}
+            onChangeText={(t) => setAmountStr(formatCurrencyInput(t))}
+          />
+          <Pressable
+            onPress={() => setShowAddAmountModal(true)}
+            style={({ pressed }) => [styles.addAmountIconButton, pressed && styles.pressed]}
+            hitSlop={8}
+          >
+            <FontAwesome name="plus-circle" size={22} color={colors.income} />
+          </Pressable>
+        </View>
+        <Modal
+          visible={showAddAmountModal}
+          transparent
+          animationType="fade"
+          onRequestClose={closeAddAmountModal}
+          onShow={focusAddAmountInput}
+        >
+          <Pressable
+            style={styles.inlineModalOverlay}
+            onPress={closeAddAmountModal}
+          >
+            <Pressable
+              style={[
+                styles.inlineModalContent,
+                { backgroundColor: colors.theme.card },
+              ]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={[styles.inlineModalTitle, { color: colors.text }]}>
+                Somar valor
+              </Text>
+              <TextInput
+                ref={addAmountInputRef}
+                style={[
+                  styles.inlineModalInput,
+                  {
+                    backgroundColor: colors.background,
+                    color: colors.text,
+                    borderColor: colors.tabIconDefault,
+                  },
+                ]}
+                placeholder="0,00"
+                placeholderTextColor={colors.tabIconDefault}
+                keyboardType="numeric"
+                value={addAmountStr}
+                onChangeText={(t) => setAddAmountStr(formatCurrencyInput(t))}
+                returnKeyType="done"
+                onSubmitEditing={handleAddAmount}
+                blurOnSubmit
+              />
+              <View style={styles.inlineModalActions}>
+                <Pressable
+                  onPress={closeAddAmountModal}
+                  style={({ pressed }) => [
+                    styles.inlineModalActionButton,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.tabIconDefault,
+                    },
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={{ color: colors.text, fontWeight: "600" }}>Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleAddAmount}
+                  style={({ pressed }) => [
+                    styles.inlineModalActionButton,
+                    { backgroundColor: colors.tint },
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>Somar</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
 
       <View style={styles.field}>
@@ -410,6 +523,22 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
   },
+  amountInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 0,
+    paddingRight: 8,
+  },
+  amountTextInput: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingLeft: 14,
+    paddingRight: 8,
+    fontSize: 16,
+  },
+  addAmountIconButton: {
+    padding: 6,
+  },
   categoryInputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -447,6 +576,38 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     paddingHorizontal: 16,
     paddingTop: 120,
+  },
+  inlineModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  inlineModalContent: {
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  inlineModalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  inlineModalInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
+  },
+  inlineModalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  inlineModalActionButton: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
   },
   categoryModalContent: {
     borderRadius: 12,
