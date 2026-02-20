@@ -1,5 +1,6 @@
 import { FixedExpenseListItem } from '@/components/FixedExpenseListItem';
 import { MonthSelector } from '@/components/MonthSelector';
+import { PlannedIncomeListItem } from '@/components/PlannedIncomeListItem';
 import { TransactionListItem } from '@/components/TransactionListItem';
 import { useMonth } from '@/context/MonthContext';
 import { useValuesVisibility } from '@/context/ValuesVisibilityContext';
@@ -31,6 +32,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [transactionsExpanded, setTransactionsExpanded] = useState(true);
+  const [plannedExpensesExpanded, setPlannedExpensesExpanded] = useState(true);
   const [fixedExpensesExpanded, setFixedExpensesExpanded] = useState(true);
 
   useFocusEffect(
@@ -40,19 +42,34 @@ export default function HomeScreen() {
   );
 
   const { income, expense, balance } = useMemo(
-    () => getMonthlyTotals(selectedMonth.month, selectedMonth.year),
+    () => getMonthlyTotals(selectedMonth),
     [selectedMonth, refreshKey],
   );
 
   const allTransactions = useMemo(
-    () => getTransactionsByMonth(selectedMonth.month, selectedMonth.year),
+    () => getTransactionsByMonth(selectedMonth),
     [selectedMonth, refreshKey],
   );
 
   const regularTransactions = useMemo(() => {
-    const list = allTransactions.filter((t) => t.fixed_expense_id == null);
+    const list = allTransactions.filter(
+      (t) => t.fixed_expense_id == null && (t.planned ?? 0) !== 1
+    );
     return [...list].sort((a, b) => {
       const dateCmp = (b.date || '').localeCompare(a.date || '');
+      if (dateCmp !== 0) return dateCmp;
+      return (a.category_name || '').localeCompare(b.category_name || '');
+    });
+  }, [allTransactions]);
+
+  const plannedTransactions = useMemo(() => {
+    const list = allTransactions.filter(
+      (t) => t.fixed_expense_id == null && (t.planned ?? 0) === 1
+    );
+    return [...list].sort((a, b) => {
+      const paidCmp = (a.paid ?? 0) - (b.paid ?? 0);
+      if (paidCmp !== 0) return paidCmp;
+      const dateCmp = (a.date || '').localeCompare(b.date || '');
       if (dateCmp !== 0) return dateCmp;
       return (a.category_name || '').localeCompare(b.category_name || '');
     });
@@ -70,15 +87,12 @@ export default function HomeScreen() {
   }, [allTransactions]);
 
   const handleTogglePaid = (id: number, paid: number) => {
-    updateTransactionPaid(id, paid);
+    updateTransactionPaid({ id, paid });
     setRefreshKey((k) => k + 1);
   };
 
   const categoriesOverLimit = useMemo(() => {
-    const spending = getCategorySpendingByMonth(
-      selectedMonth.month,
-      selectedMonth.year,
-    );
+    const spending = getCategorySpendingByMonth(selectedMonth);
     return spending.filter((c) => c.limit != null && c.spent > (c.limit ?? 0));
   }, [selectedMonth, refreshKey]);
 
@@ -225,6 +239,48 @@ export default function HomeScreen() {
           </>
         )}
       </View>
+
+      {plannedTransactions.length > 0 && (
+        <View style={styles.section}>
+          <Pressable
+            onPress={() => setPlannedExpensesExpanded((e) => !e)}
+            style={({ pressed }) => [
+              styles.sectionHeader,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              {pt.planned}
+            </Text>
+            <FontAwesome
+              name={plannedExpensesExpanded ? 'chevron-down' : 'chevron-right'}
+              size={18}
+              color={colors.tabIconDefault}
+            />
+          </Pressable>
+          {plannedExpensesExpanded && (
+            <>
+              {plannedTransactions.map((tx) =>
+                tx.type === 'expense' ? (
+                  <FixedExpenseListItem
+                    key={tx.id}
+                    transaction={tx}
+                    onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                    onTogglePaid={handleTogglePaid}
+                  />
+                ) : (
+                  <PlannedIncomeListItem
+                    key={tx.id}
+                    transaction={tx}
+                    onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                    onTogglePaid={handleTogglePaid}
+                  />
+                )
+              )}
+            </>
+          )}
+        </View>
+      )}
 
       <View style={styles.section}>
         <Pressable

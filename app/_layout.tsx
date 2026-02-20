@@ -9,6 +9,7 @@ import "react-native-reanimated";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
+import { ToastProvider } from "@/context/ToastContext";
 import { ValuesVisibilityProvider } from "@/context/ValuesVisibilityContext";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { MonthProvider } from "@/context/MonthContext";
@@ -58,6 +59,7 @@ function RootLayoutNav() {
     <>
       <StatusBar style={isDark ? "light" : "dark"} />
       <MonthProvider>
+        <ToastProvider>
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.background },
@@ -90,6 +92,7 @@ function RootLayoutNav() {
             options={{ presentation: "modal", title: "Editar gasto fixo" }}
           />
         </Stack>
+        </ToastProvider>
       </MonthProvider>
     </>
   );

@@ -18,13 +18,13 @@ export default function AddFixedExpenseScreen() {
     categoryId: number | null;
     note: string | null;
   }) => {
-    createFixedExpense(
-      data.name,
-      data.amount,
-      data.due_day,
-      data.categoryId,
-      data.note
-    );
+    createFixedExpense({
+      name: data.name,
+      amount: data.amount,
+      due_day: data.due_day,
+      category_id: data.categoryId,
+      note: data.note,
+    });
     router.back();
   };
 

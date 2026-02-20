@@ -12,7 +12,7 @@ interface Props {
   onTogglePaid: (id: number, paid: number) => void;
 }
 
-export function FixedExpenseListItem({
+export function PlannedIncomeListItem({
   transaction,
   onPress,
   onTogglePaid,
@@ -39,12 +39,12 @@ export function FixedExpenseListItem({
           styles.checkbox,
           {
             borderColor: colors.tabIconDefault,
-            backgroundColor: paid ? colors.expense + "40" : "transparent",
+            backgroundColor: paid ? colors.income + "40" : "transparent",
           },
         ]}
       >
         {paid && (
-          <FontAwesome name="check" size={12} color={colors.expense} />
+          <FontAwesome name="check" size={12} color={colors.income} />
         )}
       </Pressable>
       <Pressable
@@ -63,8 +63,8 @@ export function FixedExpenseListItem({
             {transaction.category_name ? ` · ${transaction.category_name}` : ""}
           </Text>
         </View>
-        <Text style={[styles.amount, { color: colors.expense }]}>
-          - {formatCurrency(transaction.amount)}
+        <Text style={[styles.amount, { color: colors.income }]}>
+          + {formatCurrency(transaction.amount)}
         </Text>
       </Pressable>
     </View>

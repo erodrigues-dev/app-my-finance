@@ -3,16 +3,8 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
+import { formatDateShort } from "@/utils/dateUtils";
 import type { TransactionWithCategory } from "@/types";
-
-function formatDateShort(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  if (!d || !m || !y) return dateStr;
-  const day = String(d).padStart(2, "0");
-  const month = String(m).padStart(2, "0");
-  const year = String(y).slice(-2);
-  return `${day}/${month}/${year}`;
-}
 
 interface Props {
   transaction: TransactionWithCategory;

@@ -3,12 +3,18 @@ import { View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { TransactionForm } from "@/components/TransactionForm";
 import { useThemeColors } from "@/hooks/useThemeColors";
+import { useMonth } from "@/context/MonthContext";
+import { useToast } from "@/context/ToastContext";
 import { createTransaction } from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
+import { getInitialDateForNewTransaction, getMonthYearFromDateStr, isDateInFutureMonth } from "@/utils/dateUtils";
+import { pt } from "@/locales/pt";
 
 export default function AddIncomeScreen() {
   const router = useRouter();
   const colors = useThemeColors();
+  const { selectedMonth } = useMonth();
+  const { showToast } = useToast();
   const categories = getAllCategories();
 
   const handleSubmit = (data: {
@@ -18,14 +24,23 @@ export default function AddIncomeScreen() {
     categoryId: number | null;
     note: string | null;
   }) => {
-    createTransaction(
-      "income",
-      data.name,
-      data.amount,
-      data.date,
-      null,
-      data.note
-    );
+    const planned = isDateInFutureMonth(data.date) ? 1 : 0;
+    createTransaction({
+      type: "income",
+      name: data.name,
+      amount: data.amount,
+      date: data.date,
+      categoryId: null,
+      note: data.note,
+      planned,
+    });
+    const { month, year } = getMonthYearFromDateStr(data.date);
+    if (year !== selectedMonth.year || month !== selectedMonth.month) {
+      showToast({
+        message: pt.transactionCreatedForMonth,
+        viewMonth: { month, year },
+      });
+    }
     router.back();
   };
 
@@ -34,6 +49,7 @@ export default function AddIncomeScreen() {
       <TransactionForm
         type="income"
         categories={categories}
+        initialDate={getInitialDateForNewTransaction(selectedMonth)}
         onSubmit={handleSubmit}
       />
     </View>

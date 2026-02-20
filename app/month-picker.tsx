@@ -98,7 +98,7 @@ export default function MonthPickerScreen() {
     () =>
       months.map((m) => ({
         ...m,
-        ...getMonthlyTotals(m.month, m.year),
+        ...getMonthlyTotals({ month: m.month, year: m.year }),
       })),
     [months]
   );

@@ -17,6 +17,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { formatCurrencyInput, parseCurrencyInput } from "@/utils/currencyInput";
+import { formatDateStr, parseDateStr } from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
 import type { TransactionType } from "@/types";
 
@@ -44,15 +45,11 @@ interface Props {
 }
 
 function formatDateForInput(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
+  return parseDateStr(dateStr);
 }
 
 function formatDateForDb(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return formatDateStr(date);
 }
 
 export function TransactionForm({

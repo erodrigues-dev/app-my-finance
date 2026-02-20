@@ -1,3 +1,4 @@
+import { getDate, isSameMonth } from "date-fns";
 import React, { useMemo, useState } from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { useFocusEffect } from "expo-router";
@@ -63,12 +64,12 @@ export default function ChartsScreen() {
   );
 
   const { income, expense } = useMemo(
-    () => getMonthlyTotals(selectedMonth.month, selectedMonth.year),
+    () => getMonthlyTotals(selectedMonth),
     [selectedMonth, refreshKey]
   );
 
   const categorySpending = useMemo(() => {
-    const data = getCategorySpendingByMonth(selectedMonth.month, selectedMonth.year);
+    const data = getCategorySpendingByMonth(selectedMonth);
     return [...data].sort((a, b) => {
       const aOver = a.limit != null && a.spent > (a.limit ?? 0);
       const bOver = b.limit != null && b.spent > (b.limit ?? 0);
@@ -86,10 +87,11 @@ export default function ChartsScreen() {
 
   const currentWeekSeparator = useMemo(() => {
     const now = new Date();
-    if (selectedMonth.month !== now.getMonth() || selectedMonth.year !== now.getFullYear()) {
+    const selected = new Date(selectedMonth.year, selectedMonth.month, 1);
+    if (!isSameMonth(selected, now)) {
       return null;
     }
-    const day = now.getDate();
+    const day = getDate(now);
     if (day <= 7) return 25;
     if (day <= 14) return 50;
     return 75;

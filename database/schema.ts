@@ -31,4 +31,5 @@ export const migrations = [
   )`,
   `ALTER TABLE transactions ADD COLUMN fixed_expense_id INTEGER REFERENCES fixed_expenses(id)`,
   `ALTER TABLE transactions ADD COLUMN paid INTEGER DEFAULT 0`,
+  `ALTER TABLE transactions ADD COLUMN planned INTEGER DEFAULT 0`,
 ];

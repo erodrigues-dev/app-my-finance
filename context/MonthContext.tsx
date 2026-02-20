@@ -1,3 +1,4 @@
+import { addMonths, getMonth, getYear, startOfMonth, subMonths } from "date-fns";
 import React, { createContext, useCallback, useContext, useState } from "react";
 
 type MonthYear = { month: number; year: number };
@@ -14,8 +15,8 @@ type MonthContextType = {
 const MonthContext = createContext<MonthContextType | undefined>(undefined);
 
 function getCurrentMonthYear(): MonthYear {
-  const now = new Date();
-  return { month: now.getMonth(), year: now.getFullYear() };
+  const now = startOfMonth(new Date());
+  return { month: getMonth(now), year: getYear(now) };
 }
 
 export function MonthProvider({ children }: { children: React.ReactNode }) {
@@ -23,19 +24,17 @@ export function MonthProvider({ children }: { children: React.ReactNode }) {
 
   const goToPreviousMonth = useCallback(() => {
     setSelectedMonth((prev) => {
-      if (prev.month === 0) {
-        return { month: 11, year: prev.year - 1 };
-      }
-      return { month: prev.month - 1, year: prev.year };
+      const d = new Date(prev.year, prev.month, 1);
+      const prevMonth = subMonths(d, 1);
+      return { month: getMonth(prevMonth), year: getYear(prevMonth) };
     });
   }, []);
 
   const goToNextMonth = useCallback(() => {
     setSelectedMonth((prev) => {
-      if (prev.month === 11) {
-        return { month: 0, year: prev.year + 1 };
-      }
-      return { month: prev.month + 1, year: prev.year };
+      const d = new Date(prev.year, prev.month, 1);
+      const nextMonth = addMonths(d, 1);
+      return { month: getMonth(nextMonth), year: getYear(nextMonth) };
     });
   }, []);
 

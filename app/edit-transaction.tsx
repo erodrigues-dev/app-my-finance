@@ -4,18 +4,23 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { TransactionForm } from "@/components/TransactionForm";
 import type { Transaction } from "@/types";
 import { useThemeColors } from "@/hooks/useThemeColors";
+import { useMonth } from "@/context/MonthContext";
+import { useToast } from "@/context/ToastContext";
 import {
   getTransactionById,
   updateTransaction,
   deleteTransaction,
 } from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
+import { getMonthYearFromDateStr, isDateInFutureMonth } from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
 
 export default function EditTransactionScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useThemeColors();
+  const { selectedMonth } = useMonth();
+  const { showToast } = useToast();
   const categories = getAllCategories();
   const [transaction, setTransaction] = useState<Transaction | null>(null);
 
@@ -45,17 +50,33 @@ export default function EditTransactionScreen() {
     categoryId: number | null;
     note: string | null;
   }) => {
-    updateTransaction(
-      transaction.id,
-      transaction.type,
-      data.name,
-      data.amount,
-      data.date,
-      data.categoryId,
-      data.note,
-      transaction.fixed_expense_id ?? undefined,
-      transaction.paid ?? 0
-    );
+    let planned: number;
+    if (transaction.fixed_expense_id != null) {
+      planned = 0;
+    } else if ((transaction.planned ?? 0) === 1) {
+      planned = 1;
+    } else {
+      planned = isDateInFutureMonth(data.date) ? 1 : 0;
+    }
+    updateTransaction({
+      id: transaction.id,
+      type: transaction.type,
+      name: data.name,
+      amount: data.amount,
+      date: data.date,
+      categoryId: data.categoryId,
+      note: data.note,
+      fixedExpenseId: transaction.fixed_expense_id ?? undefined,
+      paid: transaction.paid ?? 0,
+      planned,
+    });
+    const { month, year } = getMonthYearFromDateStr(data.date);
+    if (year !== selectedMonth.year || month !== selectedMonth.month) {
+      showToast({
+        message: pt.transactionEditedForMonth,
+        viewMonth: { month, year },
+      });
+    }
     router.back();
   };
 

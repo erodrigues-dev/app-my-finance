@@ -19,6 +19,11 @@ export const pt = {
   transactions: "Transações",
   noTransactions: "Nenhuma transação este mês",
   noFixedExpenses: "Nenhum gasto fixo lançado este mês",
+  planned: "Planejado",
+  noPlanned: "Nenhum item planejado",
+  transactionCreatedForMonth: "Transação criada para o mês",
+  transactionEditedForMonth: "Transação editada para o mês",
+  viewMonth: "Visualizar",
 
   // Add forms
   addIncomeTitle: "Adicionar Entrada",
@@ -99,6 +104,7 @@ export const pt = {
   selectMonth: "Selecionar mês",
   dueDay: "Dia do vencimento",
   paid: "Pago",
+  received: "Recebido",
   noFixedExpensesList: "Nenhum gasto fixo. Adicione um e use \"Importar\" para lançar no mês.",
   totalFixedExpenses: "Total",
   fixedExpensesSyncFeedback: "gasto(s) sincronizado(s) para",

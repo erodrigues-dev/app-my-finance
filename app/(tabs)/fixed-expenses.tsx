@@ -1,3 +1,4 @@
+import { addMonths, getMonth, getYear, startOfMonth } from "date-fns";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
@@ -35,11 +36,11 @@ const MONTH_NAMES = [
 ];
 
 function getMonthsForImport(): { month: number; year: number }[] {
-  const now = new Date();
+  const start = startOfMonth(new Date());
   const result: { month: number; year: number }[] = [];
   for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    result.push({ month: d.getMonth(), year: d.getFullYear() });
+    const d = addMonths(start, i);
+    result.push({ month: getMonth(d), year: getYear(d) });
   }
   return result;
 }
@@ -107,7 +108,7 @@ export default function FixedExpensesScreen() {
 
   const handleImportMonth = (month: number, year: number) => {
     setImportModalVisible(false);
-    const { created, updated } = importFixedExpensesToMonth(month, year);
+    const { created, updated } = importFixedExpensesToMonth({ month, year });
     const monthLabel = `${MONTH_NAMES[month]} ${year}`;
     if (created === 0 && updated === 0) {
       Alert.alert(pt.importFixedExpenses, `Nenhum gasto fixo para sincronizar em ${monthLabel}.`);

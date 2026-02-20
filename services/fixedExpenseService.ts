@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { getDb } from "@/database/init";
 import type { FixedExpense } from "@/types";
 import {
@@ -54,13 +55,30 @@ export function getFixedExpenseById(id: number): FixedExpense | null {
   return row ?? null;
 }
 
-export function createFixedExpense(
-  name: string,
-  amount: number,
-  due_day: number,
-  category_id: number | null,
-  note: string | null
-): number {
+export type CreateFixedExpenseParams = {
+  name: string;
+  amount: number;
+  due_day: number;
+  category_id: number | null;
+  note: string | null;
+};
+
+export type UpdateFixedExpenseParams = {
+  id: number;
+  name: string;
+  amount: number;
+  due_day: number;
+  category_id: number | null;
+  note: string | null;
+};
+
+export function createFixedExpense({
+  name,
+  amount,
+  due_day,
+  category_id,
+  note,
+}: CreateFixedExpenseParams): number {
   const db = getDb();
   const result = db.runSync(
     "INSERT INTO fixed_expenses (name, amount, due_day, category_id, note) VALUES (?, ?, ?, ?, ?)",
@@ -73,14 +91,14 @@ export function createFixedExpense(
   return result.lastInsertRowId;
 }
 
-export function updateFixedExpense(
-  id: number,
-  name: string,
-  amount: number,
-  due_day: number,
-  category_id: number | null,
-  note: string | null
-): void {
+export function updateFixedExpense({
+  id,
+  name,
+  amount,
+  due_day,
+  category_id,
+  note,
+}: UpdateFixedExpenseParams): void {
   const db = getDb();
   db.runSync(
     "UPDATE fixed_expenses SET name = ?, amount = ?, due_day = ?, category_id = ?, note = ? WHERE id = ?",
@@ -108,12 +126,11 @@ export function deleteFixedExpense(id: number): void {
   db.runSync("DELETE FROM fixed_expenses WHERE id = ?", id);
 }
 
-export function importFixedExpensesToMonth(
-  month: number,
-  year: number
-): { created: number; updated: number } {
+export type ImportFixedExpensesParams = { month: number; year: number };
+
+export function importFixedExpensesToMonth({ month, year }: ImportFixedExpensesParams): { created: number; updated: number } {
   const fixedExpenses = getAllFixedExpenses();
-  const transactions = getTransactionsByMonth(month, year);
+  const transactions = getTransactionsByMonth({ month, year });
   const fixedTxByFeId = new Map<number, (typeof transactions)[0]>();
   for (const tx of transactions) {
     if (tx.fixed_expense_id != null) {
@@ -125,33 +142,35 @@ export function importFixedExpensesToMonth(
   let updated = 0;
 
   for (const fe of fixedExpenses) {
-    const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(fe.due_day).padStart(2, "0")}`;
+    const date = format(new Date(year, month, fe.due_day), "yyyy-MM-dd");
     const existing = fixedTxByFeId.get(fe.id);
 
     if (existing) {
-      updateTransaction(
-        existing.id,
-        "expense",
-        fe.name,
-        fe.amount,
-        existing.date,
-        fe.category_id,
-        fe.note,
-        fe.id,
-        existing.paid ?? 0
-      );
+      updateTransaction({
+        id: existing.id,
+        type: "expense",
+        name: fe.name,
+        amount: fe.amount,
+        date: existing.date,
+        categoryId: fe.category_id,
+        note: fe.note,
+        fixedExpenseId: fe.id,
+        paid: existing.paid ?? 0,
+        planned: 0,
+      });
       updated++;
     } else {
-      createTransaction(
-        "expense",
-        fe.name,
-        fe.amount,
+      createTransaction({
+        type: "expense",
+        name: fe.name,
+        amount: fe.amount,
         date,
-        fe.category_id,
-        fe.note,
-        fe.id,
-        0
-      );
+        categoryId: fe.category_id,
+        note: fe.note,
+        fixedExpenseId: fe.id,
+        paid: 0,
+        planned: 0,
+      });
       created++;
     }
   }

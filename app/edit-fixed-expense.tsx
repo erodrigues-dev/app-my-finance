@@ -39,14 +39,14 @@ export default function EditFixedExpenseScreen() {
     categoryId: number | null;
     note: string | null;
   }) => {
-    updateFixedExpense(
-      fixedExpense.id,
-      data.name,
-      data.amount,
-      data.due_day,
-      data.categoryId,
-      data.note
-    );
+    updateFixedExpense({
+      id: fixedExpense.id,
+      name: data.name,
+      amount: data.amount,
+      due_day: data.due_day,
+      category_id: data.categoryId,
+      note: data.note,
+    });
     router.back();
   };
 

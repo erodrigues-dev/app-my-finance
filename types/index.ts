@@ -26,6 +26,7 @@ export interface Transaction {
   note: string | null;
   fixed_expense_id?: number | null;
   paid?: number;
+  planned?: number;
 }
 
 export interface TransactionWithCategory extends Transaction {
