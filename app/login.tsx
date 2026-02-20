@@ -1,5 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Alert,
   Platform,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useAuth } from "@/context/AuthContext";
@@ -16,20 +18,43 @@ export default function LoginScreen() {
   const colors = useThemeColors();
   const { authenticate, isBiometricAvailable } = useAuth();
   const [loading, setLoading] = useState(false);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     if (Platform.OS === "web" || isBiometricAvailable !== true) return;
-    let cancelled = false;
-    setLoading(true);
-    authenticate()
-      .then(() => { if (cancelled) return; })
-      .catch(() => {
-        if (!cancelled) Alert.alert(pt.biometricTitle, pt.biometricNotEnrolled);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+
+    const runAuth = () => {
+      cancelledRef.current = false;
+      setLoading(true);
+      authenticate()
+        .catch(() => {
+          if (!cancelledRef.current) {
+            Alert.alert(pt.biometricTitle, pt.biometricNotEnrolled);
+          }
+        })
+        .finally(() => {
+          if (!cancelledRef.current) setLoading(false);
+        });
+    };
+
+    if (AppState.currentState === "active") {
+      runAuth();
+    }
+
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextState: AppStateStatus) => {
+        if (nextState === "active") {
+          setLoading(false);
+          runAuth();
+        }
+      }
+    );
+
+    return () => {
+      cancelledRef.current = true;
+      subscription.remove();
+    };
   }, [authenticate, isBiometricAvailable]);
 
   const handleAuthenticate = async () => {
