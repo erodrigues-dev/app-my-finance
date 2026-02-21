@@ -7,7 +7,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { AppState, AppStateStatus, Platform } from "react-native";
+import { AppState, AppStateStatus } from "react-native";
 
 const BIOMETRIC_ENABLED_KEY = "@my_finance_biometric_enabled";
 const HAS_SEEN_FIRST_LAUNCH_KEY = "@my_finance_has_seen_first_launch";
@@ -44,25 +44,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const enabledBool = enabled === "true";
       const seenBool = seen === "true";
 
-      if (Platform.OS === "web") {
-        setBiometricEnabled(false);
-        setHasSeenFirstLaunch(true);
-        setIsAuthenticated(true);
-        setIsBiometricAvailable(false);
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      const available = hasHardware && isEnrolled;
+
+      setIsBiometricAvailable(available);
+      setHasSeenFirstLaunch(seenBool);
+      setBiometricEnabled(enabledBool && available);
+
+      if (enabledBool && available) {
+        setIsAuthenticated(false);
       } else {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-        const available = hasHardware && isEnrolled;
-
-        setIsBiometricAvailable(available);
-        setHasSeenFirstLaunch(seenBool);
-        setBiometricEnabled(enabledBool && available);
-
-        if (enabledBool && available) {
-          setIsAuthenticated(false);
-        } else {
-          setIsAuthenticated(true);
-        }
+        setIsAuthenticated(true);
       }
     } catch {
       setBiometricEnabled(false);
@@ -79,8 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadStoredState]);
 
   useEffect(() => {
-    if (Platform.OS === "web") return;
-
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === "background" && biometricEnabled) {
         setIsAuthenticated(false);
@@ -95,8 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [biometricEnabled]);
 
   const authenticate = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS === "web") return true;
-
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: "Desbloquear app",
@@ -113,8 +102,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const enableBiometric = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS === "web") return false;
-
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();

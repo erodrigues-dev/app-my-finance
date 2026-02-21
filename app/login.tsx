@@ -21,7 +21,7 @@ export default function LoginScreen() {
   const cancelledRef = useRef(false);
 
   useEffect(() => {
-    if (Platform.OS === "web" || isBiometricAvailable !== true) return;
+    if (isBiometricAvailable !== true) return;
 
     const runAuth = () => {
       cancelledRef.current = false;
@@ -58,9 +58,6 @@ export default function LoginScreen() {
   }, [authenticate, isBiometricAvailable]);
 
   const handleAuthenticate = async () => {
-    if (Platform.OS === "web") {
-      return;
-    }
     if (isBiometricAvailable === false) {
       Alert.alert(
         pt.biometricTitle,

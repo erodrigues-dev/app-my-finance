@@ -27,11 +27,6 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.myfinance"
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
       "expo-router",
       "expo-sqlite",

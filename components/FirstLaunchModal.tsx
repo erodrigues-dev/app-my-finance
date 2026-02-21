@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Alert,
-  Platform,
 } from "react-native";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useAuth } from "@/context/AuthContext";
@@ -25,10 +24,6 @@ export default function FirstLaunchModal() {
   if (hasSeenFirstLaunch) return null;
 
   const handleActivate = async () => {
-    if (Platform.OS === "web") {
-      await markFirstLaunchSeen();
-      return;
-    }
     if (isBiometricAvailable === false) {
       Alert.alert(
         pt.biometricTitle,
