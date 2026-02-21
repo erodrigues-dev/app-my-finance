@@ -46,6 +46,17 @@ export const pt = {
   filterInvalidDateRangeMessage: "A data inicial deve ser menor ou igual à data final.",
   filterOutOfMonthRangeTitle: "Fora do mês selecionado",
   filterOutOfMonthRangeMessage: "Selecione um período dentro do mês atual.",
+  notifyDueTitle: "Lembrete de contas",
+  notifyOverdueBody: "Ei! vc tem contas vencidas, regularize o quanto antes",
+  notifyDueTodayBody: "Ei! vc tem contas vencendo hoje",
+  notifyDueSoonBody: "Ei! vc tem contas a pagar vencendo nos próximos {days} dias",
+  notifyDueChannelName: "Lembretes de contas",
+  notifyTestAction: "Testar notificação de contas",
+  notifyTestDescription: "Disparar agora a notificação do dia para validação",
+  notifyTestSent: "Notificação enviada para teste",
+  notifyTestNoDue: "Nenhuma conta elegível para notificação hoje",
+  notifyTestPermissionDenied: "Permissão de notificação não concedida",
+  notifyTestError: "Não foi possível disparar o teste de notificação",
 
   // Add forms
   addIncomeTitle: "Adicionar Entrada",

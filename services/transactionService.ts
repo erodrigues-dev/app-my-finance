@@ -1,9 +1,14 @@
 import { getDb } from "@/database/init";
 import { formatDateStr, getMonthRange, getWeeksInMonth, isDateInFutureMonth, parseDateStr } from "@/utils/dateUtils";
 import type { Transaction, TransactionType, TransactionWithCategory } from "@/types";
-import { addMonths } from "date-fns";
+import { addDays, addMonths, differenceInCalendarDays } from "date-fns";
 
 export type MonthYear = { month: number; year: number };
+export type DueNotificationsSnapshot = {
+  hasOverdue: boolean;
+  hasDueToday: boolean;
+  dueSoonInDays: number | null;
+};
 
 export type CreateTransactionParams = {
   type: TransactionType;
@@ -297,6 +302,51 @@ export function updateTransactionPaid({ id, paid }: { id: number; paid: number }
 export function deleteTransaction(id: number): void {
   const db = getDb();
   db.runSync("DELETE FROM transactions WHERE id = ?", id);
+}
+
+export function getDueNotificationsSnapshot(): DueNotificationsSnapshot {
+  const db = getDb();
+  const todayDate = parseDateStr(formatDateStr(new Date()));
+  const todayStr = formatDateStr(todayDate);
+  const tomorrowStr = formatDateStr(addDays(todayDate, 1));
+  const sevenDaysAheadStr = formatDateStr(addDays(todayDate, 7));
+
+  const baseWhere = `
+    type = 'expense'
+    AND COALESCE(paid, 0) != 1
+    AND (COALESCE(planned, 0) = 1 OR fixed_expense_id IS NOT NULL)
+  `;
+
+  const overdueRow = db.getFirstSync<{ count: number }>(
+    `SELECT COUNT(1) as count FROM transactions
+     WHERE ${baseWhere} AND date < ?`,
+    todayStr
+  );
+  const dueTodayRow = db.getFirstSync<{ count: number }>(
+    `SELECT COUNT(1) as count FROM transactions
+     WHERE ${baseWhere} AND date = ?`,
+    todayStr
+  );
+  const dueSoonMinRow = db.getFirstSync<{ min_date: string | null }>(
+    `SELECT MIN(date) as min_date FROM transactions
+     WHERE ${baseWhere} AND date >= ? AND date <= ?`,
+    tomorrowStr,
+    sevenDaysAheadStr
+  );
+
+  const minDate = dueSoonMinRow?.min_date ?? null;
+  const dueSoonInDays =
+    minDate == null
+      ? null
+      : differenceInCalendarDays(parseDateStr(minDate), todayDate);
+
+  return {
+    hasOverdue: (overdueRow?.count ?? 0) > 0,
+    hasDueToday: (dueTodayRow?.count ?? 0) > 0,
+    dueSoonInDays: dueSoonInDays != null && dueSoonInDays >= 1 && dueSoonInDays <= 7
+      ? dueSoonInDays
+      : null,
+  };
 }
 
 export function getMonthlyTotals({ month, year }: MonthYear): { income: number; expense: number; balance: number } {

@@ -14,6 +14,7 @@ import { ValuesVisibilityProvider } from "@/context/ValuesVisibilityContext";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { MonthProvider } from "@/context/MonthContext";
 import { initDatabase } from "@/database/init";
+import { initializeDailyDueNotifications } from "@/services/dailyDueNotificationService";
 import FirstLaunchModal from "@/components/FirstLaunchModal";
 import LoginScreen from "@/app/login";
 
@@ -106,6 +107,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     initDatabase();
+    initializeDailyDueNotifications().catch(() => {
+      // Fail silently to avoid blocking app startup.
+    });
   }, []);
 
   useEffect(() => {
