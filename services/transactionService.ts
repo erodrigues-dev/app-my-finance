@@ -1,13 +1,29 @@
-import { getDb } from "@/database/init";
-import { formatDateStr, getMonthRange, getWeeksInMonth, isDateInFutureMonth, parseDateStr } from "@/utils/dateUtils";
-import type { Transaction, TransactionType, TransactionWithCategory } from "@/types";
-import { addDays, addMonths, differenceInCalendarDays } from "date-fns";
+import { getDb } from '@/database/init';
+import {
+  enqueueExpenseDelete,
+  enqueueExpenseUpsert,
+} from '@/services/remoteNotificationSyncService';
+import type {
+  Transaction,
+  TransactionType,
+  TransactionWithCategory,
+} from '@/types';
+import {
+  formatDateStr,
+  getMonthRange,
+  getWeeksInMonth,
+  isDateInFutureMonth,
+  parseDateStr,
+} from '@/utils/dateUtils';
+import { addMonths, subDays } from 'date-fns';
 
 export type MonthYear = { month: number; year: number };
-export type DueNotificationsSnapshot = {
-  hasOverdue: boolean;
-  hasDueToday: boolean;
-  dueSoonInDays: number | null;
+export type UpcomingExpenseSyncPayload = {
+  expenseId: string;
+  dueDate: string;
+  title: string;
+  status: 'pending' | 'paid';
+  updatedAt: string;
 };
 
 export type CreateTransactionParams = {
@@ -37,7 +53,74 @@ export type UpdateTransactionParams = {
   planned?: number;
 };
 
-export function getTransactionsByMonth({ month, year }: MonthYear): TransactionWithCategory[] {
+type SyncCandidateRow = {
+  id: number;
+  type: string;
+  name: string;
+  amount: number;
+  date: string;
+  paid: number | null;
+  planned: number | null;
+  fixed_expense_id: number | null;
+};
+
+/** Só despesas planejadas (planned=1) ou gastos fixos (fixed_expense_id não nulo) entram na sync/notificação. */
+function isSyncEligible(row: SyncCandidateRow): boolean {
+  return (row.planned ?? 0) === 1 || row.fixed_expense_id != null;
+}
+
+function getSyncCandidateById(id: number): SyncCandidateRow | null {
+  const db = getDb();
+  return (
+    db.getFirstSync<SyncCandidateRow>(
+      'SELECT id, type, name, amount, date, paid, planned, fixed_expense_id FROM transactions WHERE id = ?',
+      id,
+    ) ?? null
+  );
+}
+
+function buildSyncPayloadFromRow(
+  row: SyncCandidateRow,
+): UpcomingExpenseSyncPayload | null {
+  if (row.type !== 'expense') return null;
+  if ((row.paid ?? 0) === 1) return null;
+
+  return {
+    expenseId: String(row.id),
+    dueDate: row.date,
+    title: row.name,
+    status: 'pending',
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function queueSyncByTransactionId(id: number): void {
+  try {
+    const row = getSyncCandidateById(id);
+    if (!row) {
+      void enqueueExpenseDelete(String(id));
+      return;
+    }
+    if (!isSyncEligible(row)) return;
+    const payload = buildSyncPayloadFromRow(row);
+    if (!payload) {
+      void enqueueExpenseDelete(String(id));
+      return;
+    }
+    void enqueueExpenseUpsert(payload);
+  } catch (error) {
+    console.error('[MyFinanceSync] Falha ao enfileirar sync de transação', {
+      operation: 'queueSyncByTransactionId',
+      transactionId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export function getTransactionsByMonth({
+  month,
+  year,
+}: MonthYear): TransactionWithCategory[] {
   const db = getDb();
   const { startDate, endDate } = getMonthRange(month, year);
 
@@ -64,7 +147,7 @@ export function getTransactionsByMonth({ month, year }: MonthYear): TransactionW
      WHERE t.date >= ? AND t.date < ?
      ORDER BY t.date DESC, t.id DESC`,
     startDate,
-    endDate
+    endDate,
   );
 
   return rows.map((r) => ({
@@ -98,7 +181,10 @@ export function getTransactionById(id: number): Transaction | null {
     installment_group_id: number | null;
     paid: number | null;
     planned: number | null;
-  }>("SELECT id, type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned FROM transactions WHERE id = ?", id);
+  }>(
+    'SELECT id, type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned FROM transactions WHERE id = ?',
+    id,
+  );
   if (!row) return null;
   return {
     ...row,
@@ -124,7 +210,7 @@ export function createTransaction({
 }: CreateTransactionParams): number {
   const db = getDb();
   const result = db.runSync(
-    "INSERT INTO transactions (type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    'INSERT INTO transactions (type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     type,
     name,
     amount,
@@ -134,8 +220,11 @@ export function createTransaction({
     fixedExpenseId ?? null,
     installmentGroupId ?? null,
     paid ?? 0,
-    planned ?? 0
+    planned ?? 0,
   );
+  if (type === 'expense') {
+    queueSyncByTransactionId(result.lastInsertRowId);
+  }
   return result.lastInsertRowId;
 }
 
@@ -154,7 +243,7 @@ export function updateTransaction({
 }: UpdateTransactionParams): void {
   const db = getDb();
   db.runSync(
-    "UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ?, fixed_expense_id = ?, installment_group_id = ?, paid = ?, planned = ? WHERE id = ?",
+    'UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ?, fixed_expense_id = ?, installment_group_id = ?, paid = ?, planned = ? WHERE id = ?',
     type,
     name,
     amount,
@@ -165,8 +254,13 @@ export function updateTransaction({
     installmentGroupId ?? null,
     paid ?? 0,
     planned ?? 0,
-    id
+    id,
   );
+  if (type === 'expense') {
+    queueSyncByTransactionId(id);
+  } else {
+    void enqueueExpenseDelete(String(id));
+  }
 }
 
 export function updateTransactionInstallmentGroup({
@@ -178,13 +272,16 @@ export function updateTransactionInstallmentGroup({
 }): void {
   const db = getDb();
   db.runSync(
-    "UPDATE transactions SET installment_group_id = ? WHERE id = ?",
+    'UPDATE transactions SET installment_group_id = ? WHERE id = ?',
     installmentGroupId,
-    id
+    id,
   );
+  queueSyncByTransactionId(id);
 }
 
-export function getInstallmentGroupTransactions(groupId: number): Transaction[] {
+export function getInstallmentGroupTransactions(
+  groupId: number,
+): Transaction[] {
   const db = getDb();
   const rows = db.getAllSync<{
     id: number;
@@ -204,7 +301,7 @@ export function getInstallmentGroupTransactions(groupId: number): Transaction[] 
      FROM transactions
      WHERE installment_group_id = ?
      ORDER BY date ASC, id ASC`,
-    groupId
+    groupId,
   );
 
   return rows.map((row) => ({
@@ -245,9 +342,11 @@ export function updateFutureInstallmentsFromAnchor({
 
   for (let i = anchorIndex + 1; i < groupTransactions.length; i += 1) {
     const tx = groupTransactions[i];
-    if ((tx.date ?? "") <= todayStr) continue;
+    if ((tx.date ?? '') <= todayStr) continue;
 
-    const recalculatedDate = formatDateStr(addMonths(anchorDateObj, monthOffset));
+    const recalculatedDate = formatDateStr(
+      addMonths(anchorDateObj, monthOffset),
+    );
     const recalculatedPlanned = isDateInFutureMonth(recalculatedDate) ? 1 : 0;
     const recalculatedName = `${baseName} (${i + 1}/${totalInstallments})`;
 
@@ -287,81 +386,69 @@ export function deleteInstallmentsFromAnchor({
     const tx = groupTransactions[i];
     const shouldDeleteCurrent = tx.id === anchorId;
     const shouldDeleteFutureUnpaid =
-      (tx.date ?? "") > todayStr && (tx.paid ?? 0) !== 1;
+      (tx.date ?? '') > todayStr && (tx.paid ?? 0) !== 1;
     if (shouldDeleteCurrent || shouldDeleteFutureUnpaid) {
       deleteTransaction(tx.id);
     }
   }
 }
 
-export function updateTransactionPaid({ id, paid }: { id: number; paid: number }): void {
+export function updateTransactionPaid({
+  id,
+  paid,
+}: {
+  id: number;
+  paid: number;
+}): void {
   const db = getDb();
-  db.runSync("UPDATE transactions SET paid = ? WHERE id = ?", paid, id);
+  db.runSync('UPDATE transactions SET paid = ? WHERE id = ?', paid, id);
+  queueSyncByTransactionId(id);
 }
 
 export function deleteTransaction(id: number): void {
   const db = getDb();
-  db.runSync("DELETE FROM transactions WHERE id = ?", id);
+  void enqueueExpenseDelete(String(id));
+  db.runSync('DELETE FROM transactions WHERE id = ?', id);
 }
 
-export function getDueNotificationsSnapshot(): DueNotificationsSnapshot {
+export function getUpcomingExpensesForRemoteSync(): UpcomingExpenseSyncPayload[] {
   const db = getDb();
-  const todayDate = parseDateStr(formatDateStr(new Date()));
-  const todayStr = formatDateStr(todayDate);
-  const tomorrowStr = formatDateStr(addDays(todayDate, 1));
-  const sevenDaysAheadStr = formatDateStr(addDays(todayDate, 7));
-
-  const baseWhere = `
-    type = 'expense'
-    AND COALESCE(paid, 0) != 1
-    AND (COALESCE(planned, 0) = 1 OR fixed_expense_id IS NOT NULL)
-  `;
-
-  const overdueRow = db.getFirstSync<{ count: number }>(
-    `SELECT COUNT(1) as count FROM transactions
-     WHERE ${baseWhere} AND date < ?`,
-    todayStr
+  const minDateStr = formatDateStr(subDays(new Date(), 30));
+  const rows = db.getAllSync<SyncCandidateRow>(
+    `SELECT id, type, name, amount, date, paid, planned, fixed_expense_id
+     FROM transactions
+     WHERE type = 'expense'
+       AND COALESCE(paid, 0) != 1
+       AND (planned = 1 OR fixed_expense_id IS NOT NULL)
+       AND date >= ?
+     ORDER BY date ASC`,
+    minDateStr,
   );
-  const dueTodayRow = db.getFirstSync<{ count: number }>(
-    `SELECT COUNT(1) as count FROM transactions
-     WHERE ${baseWhere} AND date = ?`,
-    todayStr
-  );
-  const dueSoonMinRow = db.getFirstSync<{ min_date: string | null }>(
-    `SELECT MIN(date) as min_date FROM transactions
-     WHERE ${baseWhere} AND date >= ? AND date <= ?`,
-    tomorrowStr,
-    sevenDaysAheadStr
-  );
-
-  const minDate = dueSoonMinRow?.min_date ?? null;
-  const dueSoonInDays =
-    minDate == null
-      ? null
-      : differenceInCalendarDays(parseDateStr(minDate), todayDate);
-
-  return {
-    hasOverdue: (overdueRow?.count ?? 0) > 0,
-    hasDueToday: (dueTodayRow?.count ?? 0) > 0,
-    dueSoonInDays: dueSoonInDays != null && dueSoonInDays >= 1 && dueSoonInDays <= 7
-      ? dueSoonInDays
-      : null,
-  };
+  const payloads: UpcomingExpenseSyncPayload[] = [];
+  for (const row of rows) {
+    const payload = buildSyncPayloadFromRow(row);
+    if (payload) payloads.push(payload);
+  }
+  return payloads;
 }
 
-export function getMonthlyTotals({ month, year }: MonthYear): { income: number; expense: number; balance: number } {
+export function getMonthlyTotals({ month, year }: MonthYear): {
+  income: number;
+  expense: number;
+  balance: number;
+} {
   const db = getDb();
   const { startDate, endDate } = getMonthRange(month, year);
 
   const incomeRow = db.getFirstSync<{ total: number }>(
     "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'income' AND date >= ? AND date < ?",
     startDate,
-    endDate
+    endDate,
   );
   const expenseRow = db.getFirstSync<{ total: number }>(
     "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'expense' AND date >= ? AND date < ?",
     startDate,
-    endDate
+    endDate,
   );
 
   const income = incomeRow?.total ?? 0;
@@ -369,7 +456,10 @@ export function getMonthlyTotals({ month, year }: MonthYear): { income: number; 
   return { income, expense, balance: income - expense };
 }
 
-export function getIncomeBySource({ month, year }: MonthYear): { source: string; amount: number; color: string }[] {
+export function getIncomeBySource({
+  month,
+  year,
+}: MonthYear): { source: string; amount: number; color: string }[] {
   const db = getDb();
   const { startDate, endDate } = getMonthRange(month, year);
 
@@ -381,22 +471,34 @@ export function getIncomeBySource({ month, year }: MonthYear): { source: string;
      HAVING amount > 0
      ORDER BY amount DESC`,
     startDate,
-    endDate
+    endDate,
   );
 
   const INCOME_COLORS = [
-    "#50FA7B", "#8BE9FD", "#BD93F9", "#FF79C6", "#F1FA8C",
-    "#FFB86C", "#6272A4", "#A4D4AE",
+    '#50FA7B',
+    '#8BE9FD',
+    '#BD93F9',
+    '#FF79C6',
+    '#F1FA8C',
+    '#FFB86C',
+    '#6272A4',
+    '#A4D4AE',
   ];
 
   return rows.map((r, i) => ({
-    source: r.name || "Outros",
+    source: r.name || 'Outros',
     amount: r.amount,
     color: INCOME_COLORS[i % INCOME_COLORS.length],
   }));
 }
 
-export function getCategorySpendingByMonth({ month, year }: MonthYear): { categoryId: number; categoryName: string; spent: number; limit: number | null; color: string }[] {
+export function getCategorySpendingByMonth({ month, year }: MonthYear): {
+  categoryId: number;
+  categoryName: string;
+  spent: number;
+  limit: number | null;
+  color: string;
+}[] {
   const db = getDb();
   const { startDate, endDate } = getMonthRange(month, year);
 
@@ -415,7 +517,7 @@ export function getCategorySpendingByMonth({ month, year }: MonthYear): { catego
      GROUP BY c.id, c.name, c.spending_limit, c.color
      HAVING spent > 0`,
     startDate,
-    endDate
+    endDate,
   );
 
   return rows
@@ -449,7 +551,7 @@ export function getCategorySpendingByWeek({ month, year }: MonthYear): {
          WHERE t.category_id = ? AND t.type = 'expense' AND t.date >= ? AND t.date < ?`,
         cat.categoryId,
         start,
-        end
+        end,
       );
       return row?.spent ?? 0;
     });

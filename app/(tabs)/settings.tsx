@@ -14,7 +14,8 @@ import * as FileSystem from "expo-file-system/legacy";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useTheme } from "@/context/ThemeContext";
 import { shareBackup, restoreBackup } from "@/services/exportService";
-import { triggerDailyDueNotificationNow } from "@/services/dailyDueNotificationService";
+import { triggerManualSyncTest } from "@/services/remoteNotificationSyncService";
+import { getUpcomingExpensesForRemoteSync } from "@/services/transactionService";
 import { useAuth } from "@/context/AuthContext";
 import { pt } from "@/locales/pt";
 
@@ -29,7 +30,7 @@ export default function SettingsScreen() {
   } = useAuth();
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
-  const [notificationTestLoading, setNotificationTestLoading] = useState(false);
+  const [syncTestLoading, setSyncTestLoading] = useState(false);
 
   const handleBiometricToggle = async (value: boolean) => {
     setBiometricLoading(true);
@@ -96,21 +97,20 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleTriggerDailyNotificationTest = async () => {
-    setNotificationTestLoading(true);
+  const handleTriggerSyncTest = async () => {
+    setSyncTestLoading(true);
     try {
-      const result = await triggerDailyDueNotificationNow();
-      if (result === "sent") {
-        Alert.alert("Sucesso", pt.notifyTestSent);
-      } else if (result === "no_due") {
-        Alert.alert("Info", pt.notifyTestNoDue);
+      const payloads = getUpcomingExpensesForRemoteSync();
+      await triggerManualSyncTest(payloads);
+      if (payloads.length === 0) {
+        Alert.alert("Info", pt.syncTestNoData);
       } else {
-        Alert.alert("Atenção", pt.notifyTestPermissionDenied);
+        Alert.alert("Sucesso", pt.syncTestSuccess.replace("{count}", String(payloads.length)));
       }
     } catch {
-      Alert.alert("Erro", pt.notifyTestError);
+      Alert.alert("Erro", pt.syncTestError);
     } finally {
-      setNotificationTestLoading(false);
+      setSyncTestLoading(false);
     }
   };
 
@@ -217,20 +217,17 @@ export default function SettingsScreen() {
             </View>
           </Pressable>
           <Pressable
-            onPress={handleTriggerDailyNotificationTest}
-            disabled={loading || notificationTestLoading}
-            style={({ pressed }) => [
-              styles.optionRow,
-              pressed && styles.pressed,
-            ]}
+            onPress={handleTriggerSyncTest}
+            disabled={loading || syncTestLoading}
+            style={({ pressed }) => [styles.optionRow, pressed && styles.pressed]}
           >
-            <FontAwesome name="bell" size={20} color={colors.tint} />
+            <FontAwesome name="refresh" size={20} color={colors.tint} />
             <View style={styles.optionContent}>
               <Text style={[styles.optionLabel, { color: colors.text }]}>
-                {pt.notifyTestAction}
+                {pt.syncTestAction}
               </Text>
               <Text style={[styles.optionDesc, { color: colors.tabIconDefault }]}>
-                {pt.notifyTestDescription}
+                {pt.syncTestDescription}
               </Text>
             </View>
           </Pressable>

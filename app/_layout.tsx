@@ -1,38 +1,41 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Stack } from "expo-router";
-import { useFonts } from "expo-font";
-import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
-import { StatusBar } from "expo-status-bar";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import "react-native-reanimated";
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useFonts } from 'expo-font';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import 'react-native-reanimated';
 
-import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { ThemeProvider, useTheme } from "@/context/ThemeContext";
-import { ToastProvider } from "@/context/ToastContext";
-import { ValuesVisibilityProvider } from "@/context/ValuesVisibilityContext";
-import { useThemeColors } from "@/hooks/useThemeColors";
-import { MonthProvider } from "@/context/MonthContext";
-import { initDatabase } from "@/database/init";
-import { initializeDailyDueNotifications } from "@/services/dailyDueNotificationService";
-import FirstLaunchModal from "@/components/FirstLaunchModal";
-import LoginScreen from "@/app/login";
+import LoginScreen from '@/app/login';
+import FirstLaunchModal from '@/components/FirstLaunchModal';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { MonthProvider } from '@/context/MonthContext';
+import { ThemeProvider, useTheme } from '@/context/ThemeContext';
+import { ToastProvider } from '@/context/ToastContext';
+import { ValuesVisibilityProvider } from '@/context/ValuesVisibilityContext';
+import { initDatabase } from '@/database/init';
+import { useThemeColors } from '@/hooks/useThemeColors';
+import { isFirebaseConfigured } from '@/services/firebaseClient';
+import {
+  hasInitialSyncRun,
+  initializeRemoteNotificationSync,
+  runInitialExpenseSync,
+  setInitialSyncDone,
+} from '@/services/remoteNotificationSyncService';
+import { getUpcomingExpensesForRemoteSync } from '@/services/transactionService';
 
-export { ErrorBoundary } from "expo-router";
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  initialRouteName: "(tabs)",
+  initialRouteName: '(tabs)',
 };
 
 SplashScreen.preventAutoHideAsync();
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const {
-    isLoading,
-    biometricEnabled,
-    isAuthenticated,
-    hasSeenFirstLaunch,
-  } = useAuth();
+  const { isLoading, biometricEnabled, isAuthenticated, hasSeenFirstLaunch } =
+    useAuth();
   const { isDark } = useTheme();
 
   if (isLoading) return null;
@@ -41,7 +44,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     <>
       {biometricEnabled && !isAuthenticated ? (
         <>
-          <StatusBar style={isDark ? "light" : "dark"} />
+          <StatusBar style={isDark ? 'light' : 'dark'} />
           <LoginScreen />
         </>
       ) : (
@@ -58,41 +61,41 @@ function RootLayoutNav() {
 
   return (
     <>
-      <StatusBar style={isDark ? "light" : "dark"} />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <MonthProvider>
         <ToastProvider>
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.background },
-            headerTintColor: colors.text,
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="add-income"
-            options={{ presentation: "modal", title: "Adicionar Entrada" }}
-          />
-          <Stack.Screen
-            name="add-expense"
-            options={{ presentation: "modal", title: "Adicionar Saída" }}
-          />
-          <Stack.Screen
-            name="edit-transaction"
-            options={{ presentation: "modal", title: "Editar Transação" }}
-          />
-          <Stack.Screen
-            name="month-picker"
-            options={{ presentation: "modal", title: "Selecionar mês" }}
-          />
-          <Stack.Screen
-            name="add-fixed-expense"
-            options={{ presentation: "modal", title: "Adicionar gasto fixo" }}
-          />
-          <Stack.Screen
-            name="edit-fixed-expense"
-            options={{ presentation: "modal", title: "Editar gasto fixo" }}
-          />
-        </Stack>
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: colors.background },
+              headerTintColor: colors.text,
+            }}
+          >
+            <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
+            <Stack.Screen
+              name='add-income'
+              options={{ presentation: 'modal', title: 'Adicionar Entrada' }}
+            />
+            <Stack.Screen
+              name='add-expense'
+              options={{ presentation: 'modal', title: 'Adicionar Saída' }}
+            />
+            <Stack.Screen
+              name='edit-transaction'
+              options={{ presentation: 'modal', title: 'Editar Transação' }}
+            />
+            <Stack.Screen
+              name='month-picker'
+              options={{ presentation: 'modal', title: 'Selecionar mês' }}
+            />
+            <Stack.Screen
+              name='add-fixed-expense'
+              options={{ presentation: 'modal', title: 'Adicionar gasto fixo' }}
+            />
+            <Stack.Screen
+              name='edit-fixed-expense'
+              options={{ presentation: 'modal', title: 'Editar gasto fixo' }}
+            />
+          </Stack>
         </ToastProvider>
       </MonthProvider>
     </>
@@ -101,15 +104,32 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
+    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
   });
 
   useEffect(() => {
+    console.log('initialize database');
     initDatabase();
-    initializeDailyDueNotifications().catch(() => {
-      // Fail silently to avoid blocking app startup.
-    });
+    (async () => {
+      try {
+        await initializeRemoteNotificationSync();
+        if (isFirebaseConfigured() && !(await hasInitialSyncRun())) {
+          const payloads = getUpcomingExpensesForRemoteSync();
+          console.log(
+            'payloads carregados para sincronizacao inicial',
+            payloads.length,
+          );
+          if (payloads.length > 0) {
+            await runInitialExpenseSync(payloads);
+          } else {
+            await setInitialSyncDone();
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing remote notification sync', error);
+      }
+    })();
   }, []);
 
   useEffect(() => {

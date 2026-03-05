@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { AppState, AppStateStatus } from "react-native";
@@ -27,6 +28,8 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const INACTIVITY_TIMEOUT_MS = 120 * 1000;
+
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [hasSeenFirstLaunch, setHasSeenFirstLaunch] = useState(true);
@@ -34,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isBiometricAvailable, setIsBiometricAvailable] = useState<
     boolean | null
   >(null);
+  const lastBackgroundTimeRef = useRef<number | null>(null);
 
   const loadStoredState = useCallback(async () => {
     try {
@@ -73,8 +77,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === "background" && biometricEnabled) {
-        setIsAuthenticated(false);
+      if (nextState === "background") {
+        lastBackgroundTimeRef.current = Date.now();
+      } else if (nextState === "active" && biometricEnabled) {
+        const lastBackgroundTime = lastBackgroundTimeRef.current;
+        if (lastBackgroundTime != null) {
+          const inactiveFor = Date.now() - lastBackgroundTime;
+          if (inactiveFor >= INACTIVITY_TIMEOUT_MS) {
+            setIsAuthenticated(false);
+          }
+        }
+        lastBackgroundTimeRef.current = null;
       }
     };
 
