@@ -112,7 +112,10 @@ export function TransactionForm({
   const [installmentsCountStr, setInstallmentsCountStr] = useState("2");
   const [accountId, setAccountId] = useState<number | null>(initialAccountId ?? null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(initialPaymentMethod ?? null);
+  const previousAccountIdRef = useRef<number | null | undefined>(undefined);
 
+  // Aplica o padrão da conta só quando: (1) nova transação com conta já selecionada, ou (2) usuário TROCA de conta.
+  // Na edição, initialPaymentMethod já vem da transação (ex.: crédito); não sobrescrever.
   useEffect(() => {
     if (!accountId || accounts.length === 0) return;
     const acc = accounts.find((a) => a.id === accountId);
@@ -125,8 +128,17 @@ export function TransactionForm({
     const defaultPm = acc.default_payment_method && enabled.includes(acc.default_payment_method)
       ? acc.default_payment_method
       : enabled[0];
+
+    const prev = previousAccountIdRef.current;
+    if (prev === undefined) {
+      previousAccountIdRef.current = accountId;
+      if (initialPaymentMethod == null) setPaymentMethod(defaultPm);
+      return;
+    }
+    if (prev === accountId) return;
+    previousAccountIdRef.current = accountId;
     setPaymentMethod(defaultPm);
-  }, [accountId, accounts]);
+  }, [accountId, initialPaymentMethod]);
 
   const closeCategoryPicker = () => setShowCategoryPicker(false);
   const closeAddAmountModal = () => {
@@ -254,7 +266,7 @@ export function TransactionForm({
               borderColor: colors.tabIconDefault,
             },
           ]}
-          placeholder={pt.namePlaceholder}
+          placeholder={type === 'income' ? pt.namePlaceholder : pt.namePlaceholderExpense}
           placeholderTextColor={colors.tabIconDefault}
           value={name}
           onChangeText={setName}

@@ -17,6 +17,8 @@ interface BackupData {
     due_day: number;
     category_id: number | null;
     note: string | null;
+    account_id?: number | null;
+    payment_method?: string | null;
   }[];
   bank_accounts?: {
     id: number;
@@ -86,7 +88,11 @@ export async function createBackup(): Promise<string> {
     due_day: number;
     category_id: number | null;
     note: string | null;
-  }>("SELECT id, name, amount, due_day, category_id, note FROM fixed_expenses ORDER BY id");
+    account_id: number | null;
+    payment_method: string | null;
+  }>(
+    "SELECT id, name, amount, due_day, category_id, note, account_id, payment_method FROM fixed_expenses ORDER BY id"
+  );
 
   const bankAccountRows = db.getAllSync<{
     id: number;
@@ -197,12 +203,14 @@ export async function restoreBackup(json: string): Promise<void> {
           ? categoryIdMap[fixedExpense.category_id] ?? null
           : null;
       const result = db.runSync(
-        "INSERT INTO fixed_expenses (name, amount, due_day, category_id, note) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO fixed_expenses (name, amount, due_day, category_id, note, account_id, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?)",
         fixedExpense.name,
         fixedExpense.amount,
         fixedExpense.due_day,
         newCategoryId,
-        fixedExpense.note ?? null
+        fixedExpense.note ?? null,
+        fixedExpense.account_id ?? null,
+        fixedExpense.payment_method ?? null
       );
       fixedExpenseIdMap[fixedExpense.id] = result.lastInsertRowId;
     }

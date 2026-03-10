@@ -17,11 +17,21 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { pt } from "@/locales/pt";
 import { formatCurrencyInput, parseCurrencyInput } from "@/utils/currencyInput";
+import type { PaymentMethod } from "@/types";
 
 interface Category {
   id: number;
   name: string;
   color: string;
+}
+
+interface BankAccount {
+  id: number;
+  name: string;
+  credit_enabled: number;
+  debit_enabled: number;
+  pix_enabled: number;
+  default_payment_method?: PaymentMethod | null;
 }
 
 interface Props {
@@ -31,12 +41,17 @@ interface Props {
   initialDueDay?: number;
   initialCategoryId?: number | null;
   initialNote?: string | null;
+  accounts?: BankAccount[];
+  initialAccountId?: number | null;
+  initialPaymentMethod?: PaymentMethod | null;
   onSubmit: (data: {
     name: string;
     amount: number;
     due_day: number;
     categoryId: number | null;
     note: string | null;
+    accountId: number | null;
+    paymentMethod: PaymentMethod | null;
   }) => void;
 }
 
@@ -44,11 +59,14 @@ const DUE_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
 
 export function FixedExpenseForm({
   categories,
+  accounts = [],
   initialName = "",
   initialAmount = 0,
   initialDueDay = 10,
   initialCategoryId,
   initialNote = "",
+  initialAccountId = null,
+  initialPaymentMethod = null,
   onSubmit,
 }: Props) {
   const colors = useThemeColors();
@@ -64,6 +82,15 @@ export function FixedExpenseForm({
   const [showDueDayPicker, setShowDueDayPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
+  const [accountId, setAccountId] = useState<number | null>(initialAccountId ?? null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(initialPaymentMethod ?? null);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
+
+  const selectedAccount = accounts.find((a) => a.id === accountId) ?? null;
+  const hideDueDayField =
+    selectedAccount != null &&
+    paymentMethod === "credit" &&
+    typeof selectedAccount.due_day === "number";
 
   const closeCategoryPicker = () => setShowCategoryPicker(false);
 
@@ -93,12 +120,23 @@ export function FixedExpenseForm({
       return;
     }
 
+    if (accounts.length > 0 && !accountId) {
+      Alert.alert("Erro", "Selecione uma conta bancária para o gasto fixo.");
+      return;
+    }
+    if (accounts.length > 0 && accountId && !paymentMethod) {
+      Alert.alert("Erro", "Selecione a forma de pagamento do gasto fixo.");
+      return;
+    }
+
     onSubmit({
       name: name.trim(),
       amount,
       due_day: dueDay,
       categoryId,
       note: note.trim() || null,
+      accountId: accountId ?? null,
+      paymentMethod: paymentMethod ?? null,
     });
   };
 
@@ -154,73 +192,200 @@ export function FixedExpenseForm({
             />
           </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>{pt.dueDay} *</Text>
-            <Pressable
-              onPress={() => setShowDueDayPicker(!showDueDayPicker)}
-              style={[
-                styles.input,
-                styles.picker,
-                {
-                  backgroundColor: colors.theme.card,
-                  borderColor: colors.tabIconDefault,
-                },
-              ]}
-            >
-              <Text style={{ color: colors.text }}>Dia {dueDay}</Text>
-              <FontAwesome
-                name={showDueDayPicker ? "chevron-up" : "chevron-down"}
-                size={18}
-                color={colors.tabIconDefault}
-              />
-            </Pressable>
-            <Modal
-              visible={showDueDayPicker}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setShowDueDayPicker(false)}
-            >
+          {!hideDueDayField && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>{pt.dueDay} *</Text>
               <Pressable
-                style={styles.categoryModalOverlay}
-                onPress={() => setShowDueDayPicker(false)}
+                onPress={() => setShowDueDayPicker(!showDueDayPicker)}
+                style={[
+                  styles.input,
+                  styles.picker,
+                  {
+                    backgroundColor: colors.theme.card,
+                    borderColor: colors.tabIconDefault,
+                  },
+                ]}
+              >
+                <Text style={{ color: colors.text }}>Dia {dueDay}</Text>
+                <FontAwesome
+                  name={showDueDayPicker ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              </Pressable>
+              <Modal
+                visible={showDueDayPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowDueDayPicker(false)}
               >
                 <Pressable
-                  style={[
-                    styles.dueDayModalContent,
-                    { backgroundColor: colors.theme.card },
-                  ]}
-                  onPress={(e) => e.stopPropagation()}
+                  style={styles.categoryModalOverlay}
+                  onPress={() => setShowDueDayPicker(false)}
                 >
-                  <Text style={[styles.dueDayModalTitle, { color: colors.text }]}>
-                    {pt.dueDay}
-                  </Text>
-                  <ScrollView
-                    style={styles.dueDayScroll}
-                    showsVerticalScrollIndicator
-                    keyboardShouldPersistTaps="handled"
+                  <Pressable
+                    style={[
+                      styles.dueDayModalContent,
+                      { backgroundColor: colors.theme.card },
+                    ]}
+                    onPress={(e) => e.stopPropagation()}
                   >
-                    {DUE_DAYS.map((day) => (
-                      <Pressable
-                        key={day}
-                        onPress={() => {
-                          setDueDay(day);
-                          setShowDueDayPicker(false);
-                        }}
-                        style={[
-                          styles.categoryItem,
-                          dueDay === day && {
-                            backgroundColor: colors.tint + "30",
-                          },
-                        ]}
-                      >
-                        <Text style={{ color: colors.text }}>Dia {day}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
+                    <Text style={[styles.dueDayModalTitle, { color: colors.text }]}>
+                      {pt.dueDay}
+                    </Text>
+                    <ScrollView
+                      style={styles.dueDayScroll}
+                      showsVerticalScrollIndicator
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {DUE_DAYS.map((day) => (
+                        <Pressable
+                          key={day}
+                          onPress={() => {
+                            setDueDay(day);
+                            setShowDueDayPicker(false);
+                          }}
+                          style={[
+                            styles.categoryItem,
+                            dueDay === day && {
+                              backgroundColor: colors.tint + "30",
+                            },
+                          ]}
+                        >
+                          <Text style={{ color: colors.text }}>Dia {day}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </Pressable>
                 </Pressable>
+              </Modal>
+            </View>
+          )}
+
+          {accounts.length > 0 && (
+            <>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>{pt.bankAccount}</Text>
+                <Pressable
+                  onPress={() => setShowAccountPicker(true)}
+                  style={[
+                    styles.input,
+                    styles.picker,
+                    {
+                      backgroundColor: colors.theme.card,
+                      borderColor: colors.tabIconDefault,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      { fontSize: 16 },
+                      accountId ? { color: colors.text } : { color: colors.tabIconDefault },
+                    ]}
+                  >
+                    {accountId
+                      ? accounts.find((a) => a.id === accountId)?.name ?? ""
+                      : pt.selectAccount}
+                  </Text>
+                  <FontAwesome name="chevron-right" size={16} color={colors.tabIconDefault} />
+                </Pressable>
+              </View>
+
+              {accountId && (() => {
+                const acc = accounts.find((a) => a.id === accountId);
+                if (!acc) return null;
+                const paymentOptions: { value: PaymentMethod; label: string }[] = [
+                  ...(acc.credit_enabled ? [{ value: "credit" as const, label: pt.credit }] : []),
+                  ...(acc.debit_enabled ? [{ value: "debit" as const, label: pt.debit }] : []),
+                  ...(acc.pix_enabled ? [{ value: "pix" as const, label: pt.pix }] : []),
+                ];
+                if (paymentOptions.length === 0) return null;
+                return (
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>{pt.paymentMethod}</Text>
+                    <View style={styles.paymentMethodChips}>
+                      {paymentOptions.map((opt) => {
+                        const isSelected = paymentMethod === opt.value;
+                        return (
+                          <Pressable
+                            key={opt.value}
+                            onPress={() => setPaymentMethod(opt.value)}
+                            style={[
+                              styles.paymentMethodChip,
+                              {
+                                backgroundColor: isSelected ? colors.tint + "30" : colors.theme.card,
+                                borderColor: isSelected ? colors.tint : colors.tabIconDefault + "60",
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.paymentMethodChipText,
+                                { color: isSelected ? colors.tint : colors.text },
+                              ]}
+                            >
+                              {opt.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })()}
+            </>
+          )}
+
+          <Modal
+            visible={showAccountPicker}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowAccountPicker(false)}
+          >
+            <Pressable
+              style={styles.categoryModalOverlay}
+              onPress={() => setShowAccountPicker(false)}
+            >
+              <Pressable
+                style={[
+                  styles.dueDayModalContent,
+                  { backgroundColor: colors.theme.card },
+                ]}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <Text style={[styles.dueDayModalTitle, { color: colors.text }]}>
+                  {pt.bankAccount}
+                </Text>
+                <ScrollView
+                  style={styles.dueDayScroll}
+                  showsVerticalScrollIndicator
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {accounts.map((a) => (
+                    <Pressable
+                      key={a.id}
+                      onPress={() => {
+                        setAccountId(a.id);
+                        const enabled: PaymentMethod[] = [];
+                        if (a.credit_enabled) enabled.push("credit");
+                        if (a.debit_enabled) enabled.push("debit");
+                        if (a.pix_enabled) enabled.push("pix");
+                        const nextPaymentMethod =
+                          (a.default_payment_method && enabled.includes(a.default_payment_method))
+                            ? a.default_payment_method
+                            : enabled[0] ?? null;
+                        setPaymentMethod(nextPaymentMethod ?? null);
+                        setShowAccountPicker(false);
+                      }}
+                      style={styles.categoryItem}
+                    >
+                      <Text style={{ color: colors.text }}>{a.name}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               </Pressable>
-            </Modal>
-          </View>
+            </Pressable>
+          </Modal>
 
           {categories.length > 0 && (
             <View style={styles.field}>
@@ -507,4 +672,22 @@ const styles = StyleSheet.create({
   submitButton: { padding: 16, borderRadius: 12, alignItems: "center" },
   submitText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   pressed: { opacity: 0.9 },
+  paymentMethodChips: {
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+  },
+  paymentMethodChip: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentMethodChipText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
 });

@@ -28,6 +28,8 @@ export interface FixedExpense {
   due_day: number;
   category_id: number | null;
   note: string | null;
+  account_id?: number | null;
+  payment_method?: PaymentMethod | null;
 }
 
 export interface Transaction {

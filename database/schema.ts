@@ -55,5 +55,7 @@ export const migrations = [
   `ALTER TABLE transactions ADD COLUMN account_id INTEGER REFERENCES bank_accounts(id)`,
   `ALTER TABLE transactions ADD COLUMN payment_method TEXT CHECK(payment_method IS NULL OR payment_method IN ('credit','debit','pix'))`,
   `ALTER TABLE transactions ADD COLUMN invoice_month TEXT`,
+  `ALTER TABLE fixed_expenses ADD COLUMN account_id INTEGER REFERENCES bank_accounts(id)`,
+  `ALTER TABLE fixed_expenses ADD COLUMN payment_method TEXT CHECK(payment_method IS NULL OR payment_method IN ('credit','debit','pix'))`,
   `ALTER TABLE bank_accounts ADD COLUMN default_payment_method TEXT CHECK(default_payment_method IS NULL OR default_payment_method IN ('credit','debit','pix'))`,
 ];

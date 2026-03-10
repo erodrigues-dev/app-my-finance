@@ -18,6 +18,8 @@ import { shareBackup, restoreBackup } from "@/services/exportService";
 import { triggerManualSyncTest } from "@/services/remoteNotificationSyncService";
 import { getUpcomingExpensesForRemoteSync } from "@/services/transactionService";
 import { useAuth } from "@/context/AuthContext";
+import { useFabHeight } from "@/context/FabHeightContext";
+import { useFabPosition } from "@/context/FabPositionContext";
 import { pt } from "@/locales/pt";
 
 export default function SettingsScreen() {
@@ -30,6 +32,8 @@ export default function SettingsScreen() {
     disableBiometric,
     isBiometricAvailable,
   } = useAuth();
+  const { fabPosition, setFabPosition } = useFabPosition();
+  const { fabHeight, setFabHeight } = useFabHeight();
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [syncTestLoading, setSyncTestLoading] = useState(false);
@@ -149,6 +153,87 @@ export default function SettingsScreen() {
             </Pressable>
           ))}
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {pt.settingsFabPosition}
+        </Text>
+        <View style={[styles.card, { backgroundColor: colors.theme.card }]}>
+          {(
+            [
+              { value: "right" as const, label: pt.fabPositionRight },
+              { value: "left" as const, label: pt.fabPositionLeft },
+            ] as const
+          ).map(({ value, label }) => (
+            <Pressable
+              key={value}
+              onPress={() => setFabPosition(value)}
+              style={[
+                styles.optionRow,
+                fabPosition === value && {
+                  backgroundColor: colors.tint + "30",
+                },
+              ]}
+            >
+              <Text style={[styles.optionLabel, { color: colors.text }]}>
+                {label}
+              </Text>
+              {fabPosition === value && (
+                <FontAwesome name="check" size={18} color={colors.tint} />
+              )}
+            </Pressable>
+          ))}
+        </View>
+        <Text
+          style={[
+            styles.sectionDesc,
+            { color: colors.tabIconDefault },
+          ]}
+        >
+          {pt.settingsFabPositionDesc}
+        </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {pt.settingsFabHeight}
+        </Text>
+        <View style={[styles.card, { backgroundColor: colors.theme.card }]}>
+          {(
+            [
+              { value: "bottom" as const, label: pt.fabHeightBottom },
+              { value: "mid" as const, label: pt.fabHeightMid },
+              { value: "up" as const, label: pt.fabHeightUp },
+            ] as const
+          ).map(({ value, label }) => (
+            <Pressable
+              key={value}
+              onPress={() => setFabHeight(value)}
+              style={[
+                styles.optionRow,
+                fabHeight === value && {
+                  backgroundColor: colors.tint + "30",
+                },
+              ]}
+            >
+              <Text style={[styles.optionLabel, { color: colors.text }]}>
+                {label}
+              </Text>
+              {fabHeight === value && (
+                <FontAwesome name="check" size={18} color={colors.tint} />
+              )}
+            </Pressable>
+          ))}
+        </View>
+        <Text
+          style={[
+            styles.sectionDesc,
+            { color: colors.tabIconDefault },
+          ]}
+        >
+          {pt.settingsFabHeightDesc}
+        </Text>
       </View>
 
       <View style={styles.section}>
@@ -303,6 +388,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginHorizontal: 16,
     marginBottom: 12,
+  },
+  sectionDesc: {
+    fontSize: 13,
+    marginHorizontal: 16,
+    marginTop: 8,
   },
   card: {
     marginHorizontal: 16,

@@ -1,7 +1,7 @@
 {
   "name": "my-finance",
   "main": "expo-router/entry",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -10,7 +10,10 @@
     "apk:release": "cd android && ./gradlew assembleRelease",
     "apk:finder": "open ./android/app/build/outputs/apk/release/",
     "apk:install": "adb install android/app/build/outputs/apk/release/app-release.apk",
-    "apk:update": "adb devices && npm run apk:release && npm run apk:install"
+    "apk:update": "adb devices && npm run apk:release && npm run apk:install",
+    "apk:install:device": "./scripts/install-apk-device.sh",
+    "start:android:emulator": "./scripts/start-emulator.sh",
+    "stop:android:emulator": "./scripts/stop-emulator.sh"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

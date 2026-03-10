@@ -29,6 +29,7 @@ import { formatCurrencyInput, parseCurrencyInput } from "@/utils/currencyInput";
 import { categoryColors } from "@/theme";
 import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
 import { pt } from "@/locales/pt";
+import { fabStyles, useFabContainerStyle } from "@/components/FabLayout";
 
 const allPredefinedColors: string[] = [...categoryColors];
 
@@ -47,6 +48,7 @@ function normalizeHex(hex: string): string {
 
 export default function CategoriesScreen() {
   const colors = useThemeColors();
+  const fabContainerStyle = useFabContainerStyle({ noTabBar: true });
   const { formatCurrency: formatCurrencyDisplay } = useValuesVisibility();
   const [categories, setCategories] = useState(getAllCategories());
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -476,16 +478,18 @@ export default function CategoriesScreen() {
       </TouchableWithoutFeedback>
 
       {!showForm && (
-        <Pressable
-          onPress={handleAdd}
-          style={({ pressed }) => [
-            styles.fab,
-            { backgroundColor: colors.tint },
-            pressed && styles.pressed,
-          ]}
-        >
-          <FontAwesome name="plus" size={24} color="#fff" />
-        </Pressable>
+        <View pointerEvents="box-none" style={fabContainerStyle}>
+          <Pressable
+            onPress={handleAdd}
+            style={({ pressed }) => [
+              fabStyles.fabMain,
+              { backgroundColor: colors.tint },
+              pressed && styles.pressed,
+            ]}
+          >
+            <FontAwesome name="plus" size={24} color="#fff" />
+          </Pressable>
+        </View>
       )}
     </KeyboardAvoidingView>
   );
@@ -647,15 +651,5 @@ const styles = StyleSheet.create({
   formBtnText: {
     color: "#fff",
     fontWeight: "600",
-  },
-  fab: {
-    position: "absolute",
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

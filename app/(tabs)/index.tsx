@@ -5,6 +5,7 @@ import { TransactionListItem } from '@/components/TransactionListItem';
 import { ValuesVisibilityButton } from '@/components/ValuesVisibilityButton';
 import { useMonth } from '@/context/MonthContext';
 import { useValuesVisibility } from '@/context/ValuesVisibilityContext';
+import { useFabPosition } from '@/context/FabPositionContext';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { pt } from '@/locales/pt';
 import { getAllCategories } from '@/services/categoryService';
@@ -23,11 +24,16 @@ import {
   getMonthRange,
   parseDateStr,
 } from '@/utils/dateUtils';
-import { getBankAccountById, getCreditInvoicePaid, setCreditInvoicePaid } from '@/services/bankAccountService';
+import {
+  getAllBankAccounts,
+  getBankAccountById,
+  getCreditInvoicePaid,
+  setCreditInvoicePaid,
+} from '@/services/bankAccountService';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
-import React, { useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -39,11 +45,16 @@ import {
   Text,
   TextInput,
   View,
+  Animated,
 } from 'react-native';
+import { fabStyles, useFabContainerStyle } from '@/components/FabLayout';
+import type { PaymentMethod } from '@/types';
 
 type FilterState = {
   nameQuery: string;
   categoryIds: number[];
+  accountIds: number[];
+  paymentMethods: (PaymentMethod | 'none')[];
   startDate: string | null;
   endDate: string | null;
   transactionType: 'all' | 'income' | 'expense';
@@ -52,6 +63,8 @@ type FilterState = {
 const EMPTY_FILTER: FilterState = {
   nameQuery: '',
   categoryIds: [],
+  accountIds: [],
+  paymentMethods: [],
   startDate: null,
   endDate: null,
   transactionType: 'all',
@@ -61,9 +74,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const colors = useThemeColors();
+  const fabContainerStyle = useFabContainerStyle();
+  const { fabPosition } = useFabPosition();
   const { formatCurrency } = useValuesVisibility();
   const { selectedMonth } = useMonth();
   const categories = useMemo(() => getAllCategories(), []);
+  const accounts = useMemo(() => getAllBankAccounts(), []);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [debitExpanded, setDebitExpanded] = useState(true);
@@ -76,6 +92,16 @@ export default function HomeScreen() {
   const [draftFilter, setDraftFilter] = useState<FilterState>(EMPTY_FILTER);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fabAnim, {
+      toValue: fabOpen ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [fabOpen, fabAnim]);
 
   const { startDate: monthStartDate, endDate: monthEndDateExclusive } = useMemo(
     () => getMonthRange(selectedMonth.month, selectedMonth.year),
@@ -90,6 +116,8 @@ export default function HomeScreen() {
   const isFilterActive =
     filter.nameQuery.trim().length > 0 ||
     filter.categoryIds.length > 0 ||
+    filter.accountIds.length > 0 ||
+    filter.paymentMethods.length > 0 ||
     filter.startDate != null ||
     filter.endDate != null ||
     filter.transactionType !== 'all';
@@ -143,10 +171,23 @@ export default function HomeScreen() {
       const matchesName = query.length === 0 || t.name.toLowerCase().includes(query);
       const matchesCategory =
         filter.categoryIds.length === 0 || (t.category_id != null && filter.categoryIds.includes(t.category_id));
+      const matchesAccount =
+        filter.accountIds.length === 0 || (t.account_id != null && filter.accountIds.includes(t.account_id));
+      const normalizedPayment: PaymentMethod | 'none' = (t.payment_method ?? 'none') as PaymentMethod | 'none';
+      const matchesPayment =
+        filter.paymentMethods.length === 0 || filter.paymentMethods.includes(normalizedPayment);
       const matchesStartDate = filter.startDate == null || t.date >= filter.startDate;
       const matchesEndDate = filter.endDate == null || t.date <= filter.endDate;
       const matchesType = filter.transactionType === 'all' || t.type === filter.transactionType;
-      return matchesName && matchesCategory && matchesStartDate && matchesEndDate && matchesType;
+      return (
+        matchesName &&
+        matchesCategory &&
+        matchesAccount &&
+        matchesPayment &&
+        matchesStartDate &&
+        matchesEndDate &&
+        matchesType
+      );
     });
   }, [allTransactions, filter]);
 
@@ -193,6 +234,73 @@ export default function HomeScreen() {
   );
   const filteredTotal = useMemo(() => getSectionSubtotal(filteredTransactions), [filteredTransactions]);
 
+  type NonCreditGroup = {
+    key: string;
+    title: string;
+    subtotal: number;
+    items: typeof filteredTransactions;
+    isNoAccountNoPayment: boolean;
+  };
+
+  const nonCreditGroups: NonCreditGroup[] = useMemo(() => {
+    const allNonCredit = [
+      ...debitTransactions,
+      ...pixTransactions,
+      ...noPaymentMethodTransactions,
+    ];
+    const map = new Map<
+      string,
+      {
+        title: string;
+        subtotal: number;
+        items: typeof filteredTransactions;
+        isNoAccountNoPayment: boolean;
+      }
+    >();
+
+    for (const tx of allNonCredit) {
+      const paymentLabel =
+        tx.payment_method === 'debit'
+          ? pt.debit
+          : tx.payment_method === 'pix'
+            ? pt.pix
+            : pt.noPaymentMethodGroup;
+
+      const isNoAccountNoPayment =
+        tx.account_id == null && tx.payment_method == null;
+
+      const accountName =
+        tx.account_name ??
+        (tx.account_id != null ? pt.bankAccount : pt.noBankAccountDefined);
+
+      const key = `${tx.account_id ?? 'none'}-${tx.payment_method ?? 'none'}`;
+      const title = isNoAccountNoPayment
+        ? pt.noBankAccountDefined
+        : `${accountName} – ${paymentLabel}`;
+
+      const existing = map.get(key);
+      if (existing) {
+        existing.items.push(tx);
+        existing.subtotal += tx.type === 'income' ? tx.amount : -tx.amount;
+      } else {
+        map.set(key, {
+          title,
+          subtotal: tx.type === 'income' ? tx.amount : -tx.amount,
+          items: [tx],
+          isNoAccountNoPayment,
+        });
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([key, value]) => ({ key, ...value }))
+      .sort((a, b) => {
+        if (a.isNoAccountNoPayment && !b.isNoAccountNoPayment) return 1;
+        if (!a.isNoAccountNoPayment && b.isNoAccountNoPayment) return -1;
+        return a.title.localeCompare(b.title, 'pt-BR');
+      });
+  }, [debitTransactions, pixTransactions, noPaymentMethodTransactions]);
+
   type CreditInvoiceGroup = {
     key: string;
     accountId: number;
@@ -237,6 +345,18 @@ export default function HomeScreen() {
     result.sort((a, b) => a.invoiceMonth.localeCompare(b.invoiceMonth) || a.accountName.localeCompare(b.accountName));
     return result;
   }, [creditTransactions]);
+
+  const [expandedNonCreditGroups, setExpandedNonCreditGroups] = useState<Record<string, boolean>>({});
+
+  const toggleNonCreditGroup = (key: string) => {
+    setExpandedNonCreditGroups((prev) => {
+      const current = prev[key];
+      return {
+        ...prev,
+        [key]: current === undefined ? false : !current,
+      };
+    });
+  };
 
   const handleToggleInvoicePaid = (accountId: number, invoiceMonth: string, paid: number) => {
     setCreditInvoicePaid(accountId, invoiceMonth, paid);
@@ -303,12 +423,14 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
       <MonthSelector />
 
       <View style={styles.cardsRow}>
@@ -341,31 +463,6 @@ export default function HomeScreen() {
             {formatCurrency(balance)}
           </Text>
         </View>
-      </View>
-
-      <View style={styles.actionButtons}>
-        <Pressable
-          onPress={() => router.push('/add-expense')}
-          style={({ pressed }) => [
-            styles.actionButton,
-            { backgroundColor: colors.expenseButton },
-            pressed && styles.pressed,
-          ]}
-        >
-          <FontAwesome name='arrow-up' size={18} color='#fff' />
-          <Text style={styles.actionButtonText}>{pt.addExpense}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push('/add-income')}
-          style={({ pressed }) => [
-            styles.actionButton,
-            { backgroundColor: colors.incomeButton },
-            pressed && styles.pressed,
-          ]}
-        >
-          <FontAwesome name='arrow-down' size={18} color='#fff' />
-          <Text style={styles.actionButtonText}>{pt.addIncome}</Text>
-        </Pressable>
       </View>
 
       {categoriesOverLimit.length > 0 && (
@@ -403,17 +500,11 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {[
-        { key: 'debit', title: pt.debit, list: debitTransactions, subtotal: debitSubtotal, expanded: debitExpanded, setExpanded: setDebitExpanded },
-        { key: 'credit', title: pt.credit, list: creditTransactions, subtotal: creditSubtotal, expanded: creditExpanded, setExpanded: setCreditExpanded },
-        { key: 'pix', title: pt.pix, list: pixTransactions, subtotal: pixSubtotal, expanded: pixExpanded, setExpanded: setPixExpanded },
-        { key: 'none', title: pt.noPaymentMethodGroup, list: noPaymentMethodTransactions, subtotal: noPaymentMethodSubtotal, expanded: noPaymentMethodExpanded, setExpanded: setNoPaymentMethodExpanded },
-      ]
-        .filter(({ list }) => list.length > 0)
-        .map(({ key, title, list, subtotal, expanded, setExpanded }) => (
-        <View key={key} style={styles.section}>
+      {/* Seção Crédito (faturas) */}
+      {(creditTransactions.length > 0 || creditInvoices.length > 0) && (
+        <View style={styles.section}>
           <Pressable
-            onPress={() => setExpanded((e: boolean) => !e)}
+            onPress={() => setCreditExpanded((e: boolean) => !e)}
             style={({ pressed }) => [
               styles.sectionHeader,
               pressed && styles.pressed,
@@ -421,129 +512,159 @@ export default function HomeScreen() {
           >
             <View>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                {title}
+                {pt.credit}
               </Text>
               <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
-                {pt.subtotal}: {formatCurrency(subtotal)}
+                {pt.subtotal}: {formatCurrency(creditSubtotal)}
               </Text>
             </View>
             <FontAwesome
-              name={expanded ? 'chevron-down' : 'chevron-right'}
+              name={creditExpanded ? 'chevron-down' : 'chevron-right'}
               size={18}
               color={colors.tabIconDefault}
             />
           </Pressable>
-          {expanded && (
-            <>
-              {key === 'credit' ? (
-                creditInvoices.length === 0 ? (
-                  <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
-                    {isFilterActive
-                      ? 'Nenhuma transação encontrada com os filtros aplicados'
-                      : pt.noTransactions}
-                  </Text>
-                ) : (
-                  creditInvoices.map((fatura) => {
-                    const paid = getCreditInvoicePaid(fatura.accountId, fatura.invoiceMonth);
-                    const isInvoiceExpanded = expandedInvoices[fatura.key] !== false;
-                    const toggleInvoiceExpanded = () => {
-                      setExpandedInvoices((prev) => ({
-                        ...prev,
-                        [fatura.key]: !isInvoiceExpanded,
-                      }));
-                    };
-                    return (
-                      <View
-                        key={fatura.key}
-                        style={[styles.invoiceBlock, { backgroundColor: colors.theme.card }]}
+          {creditExpanded && (
+            creditInvoices.length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+                {isFilterActive
+                  ? 'Nenhuma transação encontrada com os filtros aplicados'
+                  : pt.noTransactions}
+              </Text>
+            ) : (
+              creditInvoices.map((fatura) => {
+                const paid = getCreditInvoicePaid(fatura.accountId, fatura.invoiceMonth);
+                const isInvoiceExpanded = expandedInvoices[fatura.key] !== false;
+                const toggleInvoiceExpanded = () => {
+                  setExpandedInvoices((prev) => ({
+                    ...prev,
+                    [fatura.key]: !isInvoiceExpanded,
+                  }));
+                };
+                return (
+                  <View
+                    key={fatura.key}
+                    style={[styles.invoiceBlock, { backgroundColor: colors.theme.card }]}
+                  >
+                    <View style={styles.invoiceHeaderRow}>
+                      <Pressable
+                        onPress={() =>
+                          handleToggleInvoicePaid(fatura.accountId, fatura.invoiceMonth, paid ? 0 : 1)
+                        }
+                        hitSlop={12}
+                        style={[
+                          styles.invoiceCheckbox,
+                          {
+                            borderColor: colors.tabIconDefault,
+                            backgroundColor: paid ? (colors.expense ?? '#e74c3c') + '40' : 'transparent',
+                          },
+                        ]}
                       >
-                        <View style={styles.invoiceHeaderRow}>
-                          <Pressable
-                            onPress={() =>
-                              handleToggleInvoicePaid(fatura.accountId, fatura.invoiceMonth, paid ? 0 : 1)
-                            }
-                            hitSlop={12}
-                            style={[
-                              styles.invoiceCheckbox,
-                              {
-                                borderColor: colors.tabIconDefault,
-                                backgroundColor: paid ? (colors.expense ?? '#e74c3c') + '40' : 'transparent',
-                              },
-                            ]}
-                          >
-                            {paid && (
-                              <FontAwesome
-                                name="check"
-                                size={12}
-                                color={colors.expense ?? '#e74c3c'}
-                              />
-                            )}
-                          </Pressable>
-                          <Pressable
-                            onPress={toggleInvoiceExpanded}
-                            style={styles.invoiceHeaderMain}
-                            hitSlop={8}
-                          >
-                            <View style={styles.invoiceHeaderLeft}>
-                              <Text style={[styles.invoiceTitle, { color: colors.text }]}>
-                                {fatura.accountName} – {fatura.invoiceMonth}
-                              </Text>
-                              <Text style={[styles.invoiceMeta, { color: colors.tabIconDefault }]}>
-                                {pt.subtotal}: {formatCurrency(fatura.total)}
-                                {fatura.dueDate ? ` · Venc: ${formatDateShort(fatura.dueDate)}` : ''}
-                              </Text>
-                            </View>
-                            <FontAwesome
-                              name={isInvoiceExpanded ? 'chevron-down' : 'chevron-right'}
-                              size={16}
-                              color={colors.tabIconDefault}
-                              style={styles.invoiceChevron}
-                            />
-                          </Pressable>
+                        {paid && (
+                          <FontAwesome
+                            name="check"
+                            size={12}
+                            color={colors.expense ?? '#e74c3c'}
+                          />
+                        )}
+                      </Pressable>
+                      <Pressable
+                        onPress={toggleInvoiceExpanded}
+                        style={styles.invoiceHeaderMain}
+                        hitSlop={8}
+                      >
+                        <View style={styles.invoiceHeaderLeft}>
+                          <Text style={[styles.invoiceTitle, { color: colors.text }]}>
+                            {fatura.accountName} – {fatura.invoiceMonth}
+                          </Text>
+                          <Text style={[styles.invoiceMeta, { color: colors.tabIconDefault }]}>
+                            {pt.subtotal}: {formatCurrency(fatura.total)}
+                            {fatura.dueDate ? ` · Venc: ${formatDateShort(fatura.dueDate)}` : ''}
+                          </Text>
                         </View>
-                        {isInvoiceExpanded && (
-                          <View style={styles.invoiceTransactionsWrap}>
-                            {fatura.transactions.map((tx) =>
-                              tx.fixed_expense_id != null ? (
-                                <FixedExpenseListItem
-                                  key={tx.id}
-                                  transaction={tx}
-                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                                />
-                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
-                                <PlannedIncomeListItem
-                                  key={tx.id}
-                                  transaction={tx}
-                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                                />
-                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
-                                <FixedExpenseListItem
-                                  key={tx.id}
-                                  transaction={tx}
-                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                                />
-                              ) : (
-                                <TransactionListItem
-                                  key={tx.id}
-                                  transaction={tx}
-                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                                />
-                              )
-                            )}
-                          </View>
+                        <FontAwesome
+                          name={isInvoiceExpanded ? 'chevron-down' : 'chevron-right'}
+                          size={16}
+                          color={colors.tabIconDefault}
+                          style={styles.invoiceChevron}
+                        />
+                      </Pressable>
+                    </View>
+                    {isInvoiceExpanded && (
+                      <View style={styles.invoiceTransactionsWrap}>
+                        {fatura.transactions.map((tx) =>
+                          tx.fixed_expense_id != null ? (
+                            <FixedExpenseListItem
+                              key={tx.id}
+                              transaction={tx}
+                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                            />
+                          ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
+                            <PlannedIncomeListItem
+                              key={tx.id}
+                              transaction={tx}
+                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                            />
+                          ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
+                            <FixedExpenseListItem
+                              key={tx.id}
+                              transaction={tx}
+                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                            />
+                          ) : (
+                            <TransactionListItem
+                              key={tx.id}
+                              transaction={tx}
+                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                            />
+                          )
                         )}
                       </View>
-                    );
-                  })
-                )
-              ) : list.length === 0 ? (
+                    )}
+                  </View>
+                );
+              })
+            )
+          )}
+        </View>
+      )}
+
+      {/* Grupos por conta / forma de pagamento (débito, PIX, sem conta) */}
+      {nonCreditGroups.map((group) => {
+        const expanded = expandedNonCreditGroups[group.key] !== false;
+        const toggle = () => toggleNonCreditGroup(group.key);
+        return (
+          <View key={group.key} style={styles.section}>
+            <Pressable
+              onPress={toggle}
+              style={({ pressed }) => [
+                styles.sectionHeader,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  {group.title}
+                </Text>
+                <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
+                  {pt.subtotal}: {formatCurrency(group.subtotal)}
+                </Text>
+              </View>
+              <FontAwesome
+                name={expanded ? 'chevron-down' : 'chevron-right'}
+                size={18}
+                color={colors.tabIconDefault}
+              />
+            </Pressable>
+            {expanded && (
+              group.items.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
                   {isFilterActive
                     ? 'Nenhuma transação encontrada com os filtros aplicados'
                     : pt.noTransactions}
                 </Text>
               ) : (
-                list.map((tx) =>
+                group.items.map((tx) =>
                   tx.fixed_expense_id != null ? (
                     <FixedExpenseListItem
                       key={tx.id}
@@ -573,11 +694,11 @@ export default function HomeScreen() {
                     />
                   )
                 )
-              )}
-            </>
-          )}
-        </View>
-      ))}
+              )
+            )}
+          </View>
+        );
+      })}
 
       {isFilterActive && (
         <View
@@ -599,6 +720,81 @@ export default function HomeScreen() {
           </Text>
         </View>
       )}
+      </ScrollView>
+
+      <View pointerEvents="box-none" style={fabContainerStyle}>
+        {fabOpen && (
+          <Pressable
+            style={fabStyles.fabBackdrop}
+            onPress={() => setFabOpen(false)}
+          />
+        )}
+        <View
+          style={[
+            fabStyles.fabMenu,
+            { alignItems: fabPosition === 'right' ? 'flex-end' : 'flex-start' },
+          ]}
+        >
+          <Animated.View
+            pointerEvents={fabOpen ? 'auto' : 'none'}
+            style={{
+              opacity: fabAnim,
+              transform: [
+                {
+                  translateY: fabAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [72, 0],
+                  }),
+                },
+              ],
+            }}
+          >
+            <View style={fabStyles.fabActionsWrap}>
+              <Pressable
+                onPress={() => {
+                  setFabOpen(false);
+                  router.push('/add-income');
+                }}
+                  style={({ pressed }) => [
+                    fabStyles.fabActionCircle,
+                    { backgroundColor: colors.incomeButton, marginBottom: 12 },
+                    pressed && styles.pressed,
+                  ]}
+              >
+                <FontAwesome name="arrow-down" size={20} color="#fff" />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setFabOpen(false);
+                  router.push('/add-expense');
+                }}
+                  style={({ pressed }) => [
+                    fabStyles.fabActionCircle,
+                    { backgroundColor: colors.expenseButton },
+                    pressed && styles.pressed,
+                  ]}
+              >
+                <FontAwesome name="arrow-up" size={20} color="#fff" />
+              </Pressable>
+            </View>
+          </Animated.View>
+
+          <Pressable
+            onPress={() => setFabOpen((open) => !open)}
+            style={({ pressed }) => [
+              fabStyles.fabMain,
+              { backgroundColor: colors.tint },
+              pressed && styles.pressed,
+            ]}
+          >
+            <FontAwesome
+              name={fabOpen ? 'times' : 'plus'}
+              size={20}
+              color="#fff"
+            />
+          </Pressable>
+        </View>
+      </View>
 
       <Modal
         visible={filterModalVisible}
@@ -695,6 +891,80 @@ export default function HomeScreen() {
                     >
                       <View style={[styles.filterChipDot, { backgroundColor: category.color }]} />
                       <Text style={{ color: colors.text }}>{category.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.filterField}>
+              <Text style={[styles.filterLabel, { color: colors.text }]}>
+                {pt.filterAccount}
+              </Text>
+              <View style={styles.filterCategoriesWrap}>
+                {accounts.map((account) => {
+                  const selected = draftFilter.accountIds.includes(account.id);
+                  return (
+                    <Pressable
+                      key={account.id}
+                      onPress={() =>
+                        setDraftFilter((prev) => ({
+                          ...prev,
+                          accountIds: selected
+                            ? prev.accountIds.filter((id) => id !== account.id)
+                            : [...prev.accountIds, account.id],
+                        }))
+                      }
+                      style={[
+                        styles.filterCategoryChip,
+                        {
+                          borderColor: selected ? colors.tint : colors.tabIconDefault,
+                          backgroundColor: selected ? colors.tint + '20' : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: colors.text }}>{account.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.filterField}>
+              <Text style={[styles.filterLabel, { color: colors.text }]}>
+                {pt.filterPaymentMethod}
+              </Text>
+              <View style={styles.filterCategoriesWrap}>
+                {(['none', 'credit', 'debit', 'pix'] as const).map((method) => {
+                  const selected = draftFilter.paymentMethods.includes(method);
+                  const label =
+                    method === 'credit'
+                      ? pt.credit
+                      : method === 'debit'
+                        ? pt.debit
+                        : method === 'pix'
+                          ? pt.pix
+                          : pt.noPaymentMethodGroupShort;
+                  return (
+                    <Pressable
+                      key={method}
+                      onPress={() =>
+                        setDraftFilter((prev) => ({
+                          ...prev,
+                          paymentMethods: selected
+                            ? prev.paymentMethods.filter((m) => m !== method)
+                            : [...prev.paymentMethods, method],
+                        }))
+                      }
+                      style={[
+                        styles.filterTypeChip,
+                        {
+                          borderColor: selected ? colors.tint : colors.tabIconDefault,
+                          backgroundColor: selected ? colors.tint + '20' : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: colors.text }}>{label}</Text>
                     </Pressable>
                   );
                 })}
@@ -813,13 +1083,19 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 120,
   },
   cardsRow: {
     flexDirection: 'row',

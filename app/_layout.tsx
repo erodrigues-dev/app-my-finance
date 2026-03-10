@@ -10,6 +10,8 @@ import 'react-native-reanimated';
 import LoginScreen from '@/app/login';
 import FirstLaunchModal from '@/components/FirstLaunchModal';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { FabHeightProvider } from '@/context/FabHeightContext';
+import { FabPositionProvider } from '@/context/FabPositionContext';
 import { MonthProvider } from '@/context/MonthContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { ToastProvider } from '@/context/ToastContext';
@@ -166,13 +168,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <ValuesVisibilityProvider>
-          <AuthProvider>
+        <FabPositionProvider>
+          <FabHeightProvider>
+            <ValuesVisibilityProvider>
+            <AuthProvider>
             <AuthGate>
               <RootLayoutNav />
             </AuthGate>
           </AuthProvider>
-        </ValuesVisibilityProvider>
+            </ValuesVisibilityProvider>
+          </FabHeightProvider>
+        </FabPositionProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

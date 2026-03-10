@@ -1,5 +1,5 @@
 import { addMonths, getMonth, getYear, startOfMonth } from "date-fns";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   StyleSheet,
   Alert,
   Modal,
+  Animated,
 } from "react-native";
+import { fabStyles, useFabContainerStyle } from "@/components/FabLayout";
 import { useRouter, useFocusEffect } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useFabPosition } from "@/context/FabPositionContext";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
 import {
@@ -87,11 +90,24 @@ function FixedExpenseRow({
 export default function FixedExpensesScreen() {
   const router = useRouter();
   const colors = useThemeColors();
+  const fabContainerStyle = useFabContainerStyle();
+  const { fabPosition } = useFabPosition();
   const { formatCurrency } = useValuesVisibility();
   const [list, setList] = useState<FixedExpenseWithCategory[]>(() =>
     getAllFixedExpenses()
   );
   const [importModalVisible, setImportModalVisible] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fabAnim, {
+      toValue: fabOpen ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [fabOpen, fabAnim]);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,6 +121,74 @@ export default function FixedExpensesScreen() {
     () => list.reduce((sum, item) => sum + item.amount, 0),
     [list]
   );
+
+  const groups = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        title: string;
+        subtotal: number;
+        items: FixedExpenseWithCategory[];
+      }
+    >();
+
+    for (const item of list) {
+      const paymentLabel =
+        item.payment_method === "credit"
+          ? pt.credit
+          : item.payment_method === "debit"
+            ? pt.debit
+            : item.payment_method === "pix"
+              ? pt.pix
+              : pt.noPaymentMethodGroup;
+
+      const accountName =
+        item.account_name ??
+        (item.account_id != null ? pt.bankAccount : pt.noBankAccountDefined);
+
+      const key = `${item.account_id ?? "none"}-${item.payment_method ?? "none"}`;
+      const isNoAccountNoPayment =
+        item.account_id == null && item.payment_method == null;
+      const title = isNoAccountNoPayment
+        ? pt.noBankAccountDefined
+        : `${accountName} - ${paymentLabel}`;
+
+      const existing = map.get(key);
+      if (existing) {
+        existing.items.push(item);
+        existing.subtotal += item.amount;
+      } else {
+        map.set(key, {
+          title,
+          subtotal: item.amount,
+          items: [item],
+        });
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([key, value]) => {
+        const [accKey, pmKey] = key.split("-");
+        const isNoAccountNoPayment = accKey === "none" && pmKey === "none";
+        return { key, ...value, isNoAccountNoPayment };
+      })
+      .sort((a, b) => {
+        if (a.isNoAccountNoPayment && !b.isNoAccountNoPayment) return 1;
+        if (!a.isNoAccountNoPayment && b.isNoAccountNoPayment) return -1;
+        return a.title.localeCompare(b.title, "pt-BR");
+      });
+  }, [list]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const current = prev[key];
+      return {
+        ...prev,
+        // se ainda não existe (começa expandido), primeiro toque recolhe (false)
+        [key]: current === undefined ? false : !current,
+      };
+    });
+  };
 
   const handleImportMonth = (month: number, year: number) => {
     setImportModalVisible(false);
@@ -121,41 +205,15 @@ export default function FixedExpensesScreen() {
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.content}
-    >
-      <View style={styles.actions}>
-        <Pressable
-          onPress={() => router.push("/add-fixed-expense" as never)}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            { backgroundColor: colors.expenseButton },
-            pressed && styles.pressed,
-          ]}
-        >
-          <FontAwesome name="plus" size={18} color="#fff" />
-          <Text style={styles.primaryButtonText}>{pt.addFixedExpense}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setImportModalVisible(true)}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            { backgroundColor: colors.theme.card, borderColor: colors.tabIconDefault },
-            pressed && styles.pressed,
-          ]}
-        >
-          <FontAwesome name="download" size={18} color={colors.text} />
-          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-            {pt.importFixedExpenses}
-          </Text>
-        </Pressable>
-      </View>
-
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+      >
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {pt.fixedExpenses}
+            {pt.fixedExpensesSummary}
           </Text>
           {list.length > 0 && (
             <Text style={[styles.totalAmount, { color: colors.expense }]}>
@@ -163,20 +221,56 @@ export default function FixedExpensesScreen() {
             </Text>
           )}
         </View>
-        {list.length === 0 ? (
+        {groups.length === 0 ? (
           <Text style={[styles.empty, { color: colors.tabIconDefault }]}>
             {pt.noFixedExpensesList}
           </Text>
         ) : (
-          list.map((item) => (
-            <FixedExpenseRow
-              key={item.id}
-              item={item}
-              onPress={() => router.push(`/edit-fixed-expense?id=${item.id}` as never)}
-              colors={colors}
-              formatCurrency={formatCurrency}
-            />
-          ))
+          groups.map((group) => {
+            const expanded = expandedGroups[group.key] ?? true;
+            return (
+              <View key={group.key} style={styles.section}>
+                <Pressable
+                  onPress={() => toggleGroup(group.key)}
+                  style={({ pressed }) => [
+                    styles.sectionHeader,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                      {group.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.sectionSubtotal,
+                        { color: colors.tabIconDefault },
+                      ]}
+                    >
+                      {pt.subtotal}: {formatCurrency(group.subtotal)}
+                    </Text>
+                  </View>
+                  <FontAwesome
+                    name={expanded ? "chevron-down" : "chevron-right"}
+                    size={18}
+                    color={colors.tabIconDefault}
+                  />
+                </Pressable>
+                {expanded &&
+                  group.items.map((item) => (
+                    <FixedExpenseRow
+                      key={item.id}
+                      item={item}
+                      onPress={() =>
+                        router.push(`/edit-fixed-expense?id=${item.id}` as never)
+                      }
+                      colors={colors}
+                      formatCurrency={formatCurrency}
+                    />
+                  ))}
+              </View>
+            );
+          })
         )}
       </View>
 
@@ -226,46 +320,109 @@ export default function FixedExpensesScreen() {
           </View>
         </Pressable>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+
+      <View pointerEvents="box-none" style={fabContainerStyle}>
+        {fabOpen && (
+          <Pressable
+            style={fabStyles.fabBackdrop}
+            onPress={() => setFabOpen(false)}
+          />
+        )}
+        <View
+          style={[
+            fabStyles.fabMenu,
+            { alignItems: fabPosition === "right" ? "flex-end" : "flex-start" },
+          ]}
+        >
+          <Animated.View
+            pointerEvents={fabOpen ? "auto" : "none"}
+            style={{
+              opacity: fabAnim,
+              transform: [
+                {
+                  translateY: fabAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [72, 0],
+                  }),
+                },
+              ],
+            }}
+          >
+            <View style={fabStyles.fabActionsWrap}>
+              <Pressable
+                onPress={() => {
+                  setFabOpen(false);
+                  setImportModalVisible(true);
+                }}
+                  style={({ pressed }) => [
+                    fabStyles.fabActionCircle,
+                  {
+                    backgroundColor: "#0891B2",
+                    marginBottom: 12,
+                  },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <FontAwesome name="download" size={20} color="#fff" />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setFabOpen(false);
+                  router.push("/add-fixed-expense" as never);
+                }}
+                  style={({ pressed }) => [
+                    fabStyles.fabActionCircle,
+                  { backgroundColor: colors.expenseButton },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <FontAwesome name="plus" size={20} color="#fff" />
+              </Pressable>
+            </View>
+          </Animated.View>
+
+          <Pressable
+            onPress={() => setFabOpen((open) => !open)}
+              style={({ pressed }) => [
+                fabStyles.fabMain,
+              { backgroundColor: colors.tint },
+              pressed && styles.pressed,
+            ]}
+          >
+            <FontAwesome
+              name={fabOpen ? "times" : "plus"}
+              size={20}
+              color="#fff"
+            />
+          </Pressable>
+        </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingBottom: 32 },
-  actions: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 24,
-  },
-  primaryButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  primaryButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  secondaryButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-  },
-  secondaryButtonText: { fontSize: 15, fontWeight: "700" },
+  scroll: { flex: 1 },
+  content: { paddingBottom: 120 },
   pressed: { opacity: 0.9 },
   section: { marginBottom: 24 },
-  sectionHeader: { marginHorizontal: 16, marginBottom: 12 },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
+  },
+  sectionSubtotal: {
+    fontSize: 13,
+    marginTop: 2,
   },
   totalAmount: {
     fontSize: 15,

@@ -5,6 +5,7 @@ import { FixedExpenseForm } from "@/components/FixedExpenseForm";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { getFixedExpenseById, updateFixedExpense, deleteFixedExpense } from "@/services/fixedExpenseService";
 import { getAllCategories } from "@/services/categoryService";
+import { getAllBankAccounts } from "@/services/bankAccountService";
 import { pt } from "@/locales/pt";
 import type { FixedExpense } from "@/types";
 
@@ -13,6 +14,7 @@ export default function EditFixedExpenseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useThemeColors();
   const categories = getAllCategories();
+  const accounts = getAllBankAccounts();
   const [fixedExpense, setFixedExpense] = useState<FixedExpense | null>(null);
 
   useEffect(() => {
@@ -38,6 +40,8 @@ export default function EditFixedExpenseScreen() {
     due_day: number;
     categoryId: number | null;
     note: string | null;
+    accountId: number | null;
+    paymentMethod: import("@/types").PaymentMethod | null;
   }) => {
     updateFixedExpense({
       id: fixedExpense.id,
@@ -46,6 +50,8 @@ export default function EditFixedExpenseScreen() {
       due_day: data.due_day,
       category_id: data.categoryId,
       note: data.note,
+      account_id: data.accountId,
+      payment_method: data.paymentMethod,
     });
     router.back();
   };
@@ -77,6 +83,9 @@ export default function EditFixedExpenseScreen() {
         initialDueDay={fixedExpense.due_day}
         initialCategoryId={fixedExpense.category_id}
         initialNote={fixedExpense.note}
+        accounts={accounts}
+        initialAccountId={fixedExpense.account_id ?? null}
+        initialPaymentMethod={fixedExpense.payment_method ?? null}
         onSubmit={handleSubmit}
       />
       <View style={styles.footer}>
