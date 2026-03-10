@@ -15,6 +15,7 @@ import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { ToastProvider } from '@/context/ToastContext';
 import { ValuesVisibilityProvider } from '@/context/ValuesVisibilityContext';
 import { initDatabase } from '@/database/init';
+import { pt } from '@/locales/pt';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { isFirebaseConfigured } from '@/services/firebaseClient';
 import {
@@ -94,6 +95,22 @@ function RootLayoutNav() {
             <Stack.Screen
               name='edit-fixed-expense'
               options={{ presentation: 'modal', title: 'Editar gasto fixo' }}
+            />
+            <Stack.Screen
+              name='categories'
+              options={{ title: pt.categories }}
+            />
+            <Stack.Screen
+              name='bank-accounts'
+              options={{ title: 'Contas bancárias' }}
+            />
+            <Stack.Screen
+              name='add-bank-account'
+              options={{ presentation: 'modal', title: 'Adicionar conta' }}
+            />
+            <Stack.Screen
+              name='edit-bank-account'
+              options={{ presentation: 'modal', title: 'Editar conta' }}
             />
           </Stack>
         </ToastProvider>

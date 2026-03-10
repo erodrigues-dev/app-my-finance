@@ -50,13 +50,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="categories"
-        options={{
-          title: pt.categories,
-          tabBarIcon: ({ color }) => <TabBarIcon name="list" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         options={{
           title: pt.settings,

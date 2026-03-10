@@ -8,6 +8,7 @@ import {
   Alert,
   Switch,
 } from "react-native";
+import { useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -20,6 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import { pt } from "@/locales/pt";
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const colors = useThemeColors();
   const { themeMode, setThemeMode } = useTheme();
   const {
@@ -172,6 +174,58 @@ export default function SettingsScreen() {
               thumbColor={biometricEnabled ? colors.tint : "#f4f3f4"}
             />
           </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {pt.categories}
+        </Text>
+        <View style={[styles.card, { backgroundColor: colors.theme.card }]}>
+          <Pressable
+            onPress={() => router.push("/categories")}
+            style={({ pressed }) => [
+              styles.optionRow,
+              pressed && styles.pressed,
+            ]}
+          >
+            <FontAwesome name="list" size={20} color={colors.tint} />
+            <View style={styles.optionContent}>
+              <Text style={[styles.optionLabel, { color: colors.text }]}>
+                {pt.categories}
+              </Text>
+              <Text style={[styles.optionDesc, { color: colors.tabIconDefault }]}>
+                Gerencie as categorias de gastos e limites.
+              </Text>
+            </View>
+            <FontAwesome name="chevron-right" size={16} color={colors.tabIconDefault} />
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {pt.bankAccounts}
+        </Text>
+        <View style={[styles.card, { backgroundColor: colors.theme.card }]}>
+          <Pressable
+            onPress={() => router.push("/bank-accounts")}
+            style={({ pressed }) => [
+              styles.optionRow,
+              pressed && styles.pressed,
+            ]}
+          >
+            <FontAwesome name="university" size={20} color={colors.tint} />
+            <View style={styles.optionContent}>
+              <Text style={[styles.optionLabel, { color: colors.text }]}>
+                {pt.bankAccounts}
+              </Text>
+              <Text style={[styles.optionDesc, { color: colors.tabIconDefault }]}>
+                {pt.bankAccountsDescription}
+              </Text>
+            </View>
+            <FontAwesome name="chevron-right" size={16} color={colors.tabIconDefault} />
+          </Pressable>
         </View>
       </View>
 

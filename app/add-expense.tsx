@@ -13,13 +13,20 @@ import {
 } from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
 import {
+  getDefaultBankAccount,
+  getAllBankAccounts,
+  getBankAccountById,
+} from "@/services/bankAccountService";
+import {
   formatDateStr,
   getInitialDateForNewTransaction,
   getMonthYearFromDateStr,
   isDateInFutureMonth,
   parseDateStr,
+  getInvoiceMonth,
 } from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
+import type { PaymentMethod } from "@/types";
 
 export default function AddExpenseScreen() {
   const router = useRouter();
@@ -36,6 +43,15 @@ export default function AddExpenseScreen() {
       })()
     : null;
 
+  const accounts = getAllBankAccounts();
+  const defaultAccount = getDefaultBankAccount();
+
+  const getInvoiceMonthForCredit = (dateStr: string, accountId: number): string | null => {
+    const acc = getBankAccountById(accountId);
+    if (!acc || acc.credit_enabled !== 1 || acc.closing_day == null) return null;
+    return getInvoiceMonth(dateStr, acc.closing_day);
+  };
+
   const handleSubmit = (data: {
     name: string;
     amount: number;
@@ -43,9 +59,18 @@ export default function AddExpenseScreen() {
     categoryId: number | null;
     note: string | null;
     installmentsCount?: number;
+    accountId?: number | null;
+    paymentMethod?: PaymentMethod | null;
   }) => {
     const installmentsCount = Math.max(1, data.installmentsCount ?? 1);
     const baseDate = parseDateStr(data.date);
+    const accountId = data.accountId ?? null;
+    const paymentMethod = data.paymentMethod ?? null;
+    const invoiceMonth =
+      paymentMethod === "credit" && accountId
+        ? getInvoiceMonthForCredit(data.date, accountId)
+        : null;
+
     if (installmentsCount === 1) {
       const planned = isDateInFutureMonth(data.date) ? 1 : 0;
       createTransaction({
@@ -56,6 +81,9 @@ export default function AddExpenseScreen() {
         categoryId: data.categoryId,
         note: data.note,
         planned,
+        accountId,
+        paymentMethod,
+        invoiceMonth,
       });
     } else {
       const firstName = `${data.name} (1/${installmentsCount})`;
@@ -67,6 +95,9 @@ export default function AddExpenseScreen() {
         categoryId: data.categoryId,
         note: data.note,
         planned: isDateInFutureMonth(data.date) ? 1 : 0,
+        accountId,
+        paymentMethod,
+        invoiceMonth,
       });
       updateTransactionInstallmentGroup({
         id: firstId,
@@ -78,6 +109,10 @@ export default function AddExpenseScreen() {
         const installmentDateStr = formatDateStr(installmentDate);
         const installmentName = `${data.name} (${i + 1}/${installmentsCount})`;
         const planned = isDateInFutureMonth(installmentDateStr) ? 1 : 0;
+        const installmentInvoiceMonth =
+          paymentMethod === "credit" && accountId
+            ? getInvoiceMonthForCredit(installmentDateStr, accountId)
+            : null;
         createTransaction({
           type: "expense",
           name: installmentName,
@@ -87,6 +122,9 @@ export default function AddExpenseScreen() {
           note: data.note,
           installmentGroupId: firstId,
           planned,
+          accountId,
+          paymentMethod,
+          invoiceMonth: installmentInvoiceMonth,
         });
       }
     }
@@ -106,6 +144,9 @@ export default function AddExpenseScreen() {
         key={duplicateId ?? "new"}
         type="expense"
         categories={categories}
+        accounts={accounts}
+        initialAccountId={duplicateSource?.account_id ?? defaultAccount?.id ?? null}
+        initialPaymentMethod={duplicateSource?.payment_method ?? null}
         initialName={duplicateSource?.name}
         initialAmount={duplicateSource?.amount}
         initialDate={duplicateSource?.date ?? getInitialDateForNewTransaction(selectedMonth)}

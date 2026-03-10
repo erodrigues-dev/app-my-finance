@@ -96,6 +96,37 @@ export function getMonthRange(month: number, year: number): { startDate: string;
   };
 }
 
+/**
+ * Mês da fatura (YYYY-MM) para uma data de compra e dia de fechamento.
+ * Compras antes do dia de fechamento entram na fatura do mês atual;
+ * no dia do fechamento ou depois entram na fatura do mês seguinte.
+ * Ex.: closingDay 10 → compra 09/03 → fatura 2025-03 (venc 10/04); compra 15/03 → fatura 2025-04.
+ */
+export function getInvoiceMonth(transactionDateStr: string, closingDay: number): string {
+  const d = parseISO(transactionDateStr);
+  const day = d.getDate();
+  const month = d.getMonth();
+  const year = d.getFullYear();
+  if (day < closingDay) {
+    return format(new Date(year, month, 1), "yyyy-MM");
+  }
+  const next = addMonths(new Date(year, month, 1), 1);
+  return format(next, "yyyy-MM");
+}
+
+/**
+ * Data de vencimento da fatura (YYYY-MM-DD): dia due_day no próprio mês da fatura (invoice_month).
+ * Ex.: fatura 2026-04 com due_day 10 → vencimento 10/04/2026.
+ */
+export function getInvoiceDueDate(invoiceMonthStr: string, dueDay: number): string {
+  const [y, m] = invoiceMonthStr.split("-").map(Number);
+  const monthStart = new Date(y, m - 1, 1);
+  const daysInMonth = getDaysInMonth(monthStart);
+  const day = Math.min(dueDay, daysInMonth);
+  const due = new Date(y, m - 1, day);
+  return format(due, DATE_FORMAT);
+}
+
 /** Weeks in month for charts: array of { startDate, endDate } in YYYY-MM-DD. endDate is exclusive. */
 export function getWeeksInMonth(month: number, year: number): { start: string; end: string }[] {
   const weeks: { start: string; end: string }[] = [];

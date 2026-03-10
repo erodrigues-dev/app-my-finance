@@ -12,10 +12,14 @@ import {
   formatDateStr,
   getMonthRange,
   getWeeksInMonth,
+  getInvoiceDueDate,
+  getInvoiceMonth,
   isDateInFutureMonth,
   parseDateStr,
 } from '@/utils/dateUtils';
-import { addMonths, subDays } from 'date-fns';
+import { addDays, addMonths, subDays } from 'date-fns';
+import { getBankAccountById } from '@/services/bankAccountService';
+import { getCreditInvoicePaid } from '@/services/bankAccountService';
 
 export type MonthYear = { month: number; year: number };
 export type UpcomingExpenseSyncPayload = {
@@ -37,6 +41,9 @@ export type CreateTransactionParams = {
   installmentGroupId?: number | null;
   paid?: number;
   planned?: number;
+  accountId?: number | null;
+  paymentMethod?: 'credit' | 'debit' | 'pix' | null;
+  invoiceMonth?: string | null;
 };
 
 export type UpdateTransactionParams = {
@@ -51,6 +58,9 @@ export type UpdateTransactionParams = {
   installmentGroupId?: number | null;
   paid?: number;
   planned?: number;
+  accountId?: number | null;
+  paymentMethod?: 'credit' | 'debit' | 'pix' | null;
+  invoiceMonth?: string | null;
 };
 
 type SyncCandidateRow = {
@@ -123,6 +133,7 @@ export function getTransactionsByMonth({
 }: MonthYear): TransactionWithCategory[] {
   const db = getDb();
   const { startDate, endDate } = getMonthRange(month, year);
+  const invoiceMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
   const rows = db.getAllSync<{
     id: number;
@@ -136,18 +147,29 @@ export function getTransactionsByMonth({
     installment_group_id: number | null;
     paid: number | null;
     planned: number | null;
+    account_id: number | null;
+    payment_method: string | null;
+    invoice_month: string | null;
     category_name: string | null;
     category_color: string | null;
+    account_name: string | null;
   }>(
     `SELECT t.id, t.type, t.name, t.amount, t.date, t.category_id, t.note,
             t.fixed_expense_id, t.installment_group_id, t.paid, t.planned,
-            c.name as category_name, c.color as category_color
+            t.account_id, t.payment_method, t.invoice_month,
+            c.name as category_name, c.color as category_color,
+            b.name as account_name
      FROM transactions t
      LEFT JOIN categories c ON t.category_id = c.id
-     WHERE t.date >= ? AND t.date < ?
+     LEFT JOIN bank_accounts b ON t.account_id = b.id
+     WHERE (
+       (t.date >= ? AND t.date < ? AND (t.payment_method IS NULL OR t.payment_method != 'credit'))
+       OR (t.payment_method = 'credit' AND t.invoice_month = ?)
+     )
      ORDER BY t.date DESC, t.id DESC`,
     startDate,
     endDate,
+    invoiceMonthStr,
   );
 
   return rows.map((r) => ({
@@ -162,8 +184,12 @@ export function getTransactionsByMonth({
     installment_group_id: r.installment_group_id ?? undefined,
     paid: r.paid ?? 0,
     planned: r.planned ?? 0,
+    account_id: r.account_id ?? undefined,
+    payment_method: (r.payment_method as 'credit' | 'debit' | 'pix') ?? undefined,
+    invoice_month: r.invoice_month ?? undefined,
     category_name: r.category_name ?? undefined,
     category_color: r.category_color ?? undefined,
+    account_name: r.account_name ?? undefined,
   }));
 }
 
@@ -181,8 +207,11 @@ export function getTransactionById(id: number): Transaction | null {
     installment_group_id: number | null;
     paid: number | null;
     planned: number | null;
+    account_id: number | null;
+    payment_method: string | null;
+    invoice_month: string | null;
   }>(
-    'SELECT id, type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned FROM transactions WHERE id = ?',
+    'SELECT id, type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned, account_id, payment_method, invoice_month FROM transactions WHERE id = ?',
     id,
   );
   if (!row) return null;
@@ -193,6 +222,9 @@ export function getTransactionById(id: number): Transaction | null {
     installment_group_id: row.installment_group_id ?? undefined,
     paid: row.paid ?? 0,
     planned: row.planned ?? 0,
+    account_id: row.account_id ?? undefined,
+    payment_method: (row.payment_method as 'credit' | 'debit' | 'pix') ?? undefined,
+    invoice_month: row.invoice_month ?? undefined,
   };
 }
 
@@ -207,10 +239,13 @@ export function createTransaction({
   installmentGroupId,
   paid,
   planned,
+  accountId,
+  paymentMethod,
+  invoiceMonth,
 }: CreateTransactionParams): number {
   const db = getDb();
   const result = db.runSync(
-    'INSERT INTO transactions (type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO transactions (type, name, amount, date, category_id, note, fixed_expense_id, installment_group_id, paid, planned, account_id, payment_method, invoice_month) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     type,
     name,
     amount,
@@ -221,6 +256,9 @@ export function createTransaction({
     installmentGroupId ?? null,
     paid ?? 0,
     planned ?? 0,
+    accountId ?? null,
+    paymentMethod ?? null,
+    invoiceMonth ?? null,
   );
   if (type === 'expense') {
     queueSyncByTransactionId(result.lastInsertRowId);
@@ -240,10 +278,13 @@ export function updateTransaction({
   installmentGroupId,
   paid,
   planned,
+  accountId,
+  paymentMethod,
+  invoiceMonth,
 }: UpdateTransactionParams): void {
   const db = getDb();
   db.runSync(
-    'UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ?, fixed_expense_id = ?, installment_group_id = ?, paid = ?, planned = ? WHERE id = ?',
+    'UPDATE transactions SET type = ?, name = ?, amount = ?, date = ?, category_id = ?, note = ?, fixed_expense_id = ?, installment_group_id = ?, paid = ?, planned = ?, account_id = ?, payment_method = ?, invoice_month = ? WHERE id = ?',
     type,
     name,
     amount,
@@ -254,6 +295,9 @@ export function updateTransaction({
     installmentGroupId ?? null,
     paid ?? 0,
     planned ?? 0,
+    accountId ?? null,
+    paymentMethod ?? null,
+    invoiceMonth ?? null,
     id,
   );
   if (type === 'expense') {
@@ -322,6 +366,8 @@ export function updateFutureInstallmentsFromAnchor({
   amount,
   categoryId,
   note,
+  accountId,
+  paymentMethod,
 }: {
   groupId: number;
   anchorId: number;
@@ -330,6 +376,8 @@ export function updateFutureInstallmentsFromAnchor({
   amount: number;
   categoryId: number | null;
   note: string | null;
+  accountId?: number | null;
+  paymentMethod?: 'credit' | 'debit' | 'pix' | null;
 }): void {
   const groupTransactions = getInstallmentGroupTransactions(groupId);
   const anchorIndex = groupTransactions.findIndex((tx) => tx.id === anchorId);
@@ -349,6 +397,13 @@ export function updateFutureInstallmentsFromAnchor({
     );
     const recalculatedPlanned = isDateInFutureMonth(recalculatedDate) ? 1 : 0;
     const recalculatedName = `${baseName} (${i + 1}/${totalInstallments})`;
+    let recalculatedInvoiceMonth: string | null = null;
+    if (paymentMethod === 'credit' && accountId) {
+      const acc = getBankAccountById(accountId);
+      if (acc?.credit_enabled === 1 && acc.closing_day != null) {
+        recalculatedInvoiceMonth = getInvoiceMonth(recalculatedDate, acc.closing_day);
+      }
+    }
 
     updateTransaction({
       id: tx.id,
@@ -362,6 +417,9 @@ export function updateFutureInstallmentsFromAnchor({
       installmentGroupId: groupId,
       paid: tx.paid ?? 0,
       planned: recalculatedPlanned,
+      accountId: accountId ?? undefined,
+      paymentMethod: paymentMethod ?? undefined,
+      invoiceMonth: recalculatedInvoiceMonth ?? undefined,
     });
     monthOffset += 1;
   }
@@ -411,9 +469,31 @@ export function deleteTransaction(id: number): void {
   db.runSync('DELETE FROM transactions WHERE id = ?', id);
 }
 
+export function buildInvoiceSyncPayload(
+  accountId: number,
+  invoiceMonth: string,
+  status: 'pending' | 'paid',
+): UpcomingExpenseSyncPayload {
+  const account = getBankAccountById(accountId);
+  const dueDate =
+    account?.due_day != null
+      ? getInvoiceDueDate(invoiceMonth, account.due_day)
+      : formatDateStr(addDays(new Date(), 7));
+  return {
+    expenseId: `invoice-${accountId}-${invoiceMonth}`,
+    dueDate,
+    title: `Fatura ${account?.name ?? 'Conta'} ${invoiceMonth}`,
+    status,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function getUpcomingExpensesForRemoteSync(): UpcomingExpenseSyncPayload[] {
   const db = getDb();
-  const minDateStr = formatDateStr(subDays(new Date(), 30));
+  const today = new Date();
+  const minDateStr = formatDateStr(subDays(today, 30));
+  const maxDateStr = formatDateStr(addDays(today, 30));
+
   const rows = db.getAllSync<SyncCandidateRow>(
     `SELECT id, type, name, amount, date, paid, planned, fixed_expense_id
      FROM transactions
@@ -429,6 +509,29 @@ export function getUpcomingExpensesForRemoteSync(): UpcomingExpenseSyncPayload[]
     const payload = buildSyncPayloadFromRow(row);
     if (payload) payloads.push(payload);
   }
+
+  const invoiceRows = db.getAllSync<{ account_id: number; invoice_month: string }>(
+    `SELECT DISTINCT account_id, invoice_month
+     FROM transactions
+     WHERE payment_method = 'credit'
+       AND account_id IS NOT NULL
+       AND invoice_month IS NOT NULL`,
+  );
+  for (const { account_id, invoice_month } of invoiceRows) {
+    if (getCreditInvoicePaid(account_id, invoice_month)) continue;
+    const account = getBankAccountById(account_id);
+    if (!account || account.credit_enabled !== 1 || account.due_day == null) continue;
+    const dueDate = getInvoiceDueDate(invoice_month, account.due_day);
+    if (dueDate < minDateStr || dueDate > maxDateStr) continue;
+    payloads.push({
+      expenseId: `invoice-${account_id}-${invoice_month}`,
+      dueDate,
+      title: `Fatura ${account.name} ${invoice_month}`,
+      status: 'pending',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   return payloads;
 }
 
@@ -445,14 +548,27 @@ export function getMonthlyTotals({ month, year }: MonthYear): {
     startDate,
     endDate,
   );
-  const expenseRow = db.getFirstSync<{ total: number }>(
-    "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'expense' AND date >= ? AND date < ?",
+
+  const income = incomeRow?.total ?? 0;
+
+  const nonCreditExpenseRow = db.getFirstSync<{ total: number }>(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+     WHERE type = 'expense' AND date >= ? AND date < ?
+       AND (payment_method IS NULL OR payment_method != 'credit')`,
     startDate,
     endDate,
   );
 
-  const income = incomeRow?.total ?? 0;
-  const expense = expenseRow?.total ?? 0;
+  const invoiceMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const creditExpenseRow = db.getFirstSync<{ total: number }>(
+    `SELECT COALESCE(SUM(t.amount), 0) as total
+     FROM transactions t
+     WHERE t.type = 'expense' AND t.payment_method = 'credit' AND t.invoice_month = ?`,
+    invoiceMonthStr,
+  );
+
+  const expense =
+    (nonCreditExpenseRow?.total ?? 0) + (creditExpenseRow?.total ?? 0);
   return { income, expense, balance: income - expense };
 }
 

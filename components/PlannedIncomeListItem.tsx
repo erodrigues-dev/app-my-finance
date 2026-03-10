@@ -9,7 +9,8 @@ import type { TransactionWithCategory } from "@/types";
 interface Props {
   transaction: TransactionWithCategory;
   onPress: () => void;
-  onTogglePaid: (id: number, paid: number) => void;
+  /** Quando undefined (ex.: transação dentro de fatura de crédito), o checkbox de pagamento não é exibido. */
+  onTogglePaid?: (id: number, paid: number) => void;
 }
 
 export function PlannedIncomeListItem({
@@ -29,7 +30,7 @@ export function PlannedIncomeListItem({
       : colors.tabIconDefault;
 
   const handleCheckboxPress = () => {
-    onTogglePaid(transaction.id, paid ? 0 : 1);
+    onTogglePaid?.(transaction.id, paid ? 0 : 1);
   };
 
   return (
@@ -39,21 +40,27 @@ export function PlannedIncomeListItem({
         { backgroundColor: colors.theme.card },
       ]}
     >
-      <Pressable
-        onPress={handleCheckboxPress}
-        hitSlop={12}
-        style={[
-          styles.checkbox,
-          {
-            borderColor: colors.tabIconDefault,
-            backgroundColor: paid ? colors.income + "40" : "transparent",
-          },
-        ]}
-      >
-        {paid && (
-          <FontAwesome name="check" size={12} color={colors.income} />
-        )}
-      </Pressable>
+      {onTogglePaid != null ? (
+        <Pressable
+          onPress={handleCheckboxPress}
+          hitSlop={12}
+          style={[
+            styles.checkbox,
+            {
+              borderColor: colors.tabIconDefault,
+              backgroundColor: paid ? colors.income + "40" : "transparent",
+            },
+          ]}
+        >
+          {paid && (
+            <FontAwesome name="check" size={12} color={colors.income} />
+          )}
+        </Pressable>
+      ) : (
+        <View style={[styles.iconSaida, { backgroundColor: colors.expense + "20" }]}>
+          <FontAwesome name="arrow-up" size={16} color={colors.expense} />
+        </View>
+      )}
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [styles.rowTouchable, pressed && styles.pressed]}
@@ -96,6 +103,14 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 6,
     borderWidth: 2,
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconSaida: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     marginRight: 12,
     alignItems: "center",
     justifyContent: "center",

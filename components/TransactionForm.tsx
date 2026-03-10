@@ -19,12 +19,23 @@ import { useThemeColors } from "@/hooks/useThemeColors";
 import { formatCurrencyInput, parseCurrencyInput } from "@/utils/currencyInput";
 import { formatDateStr, parseDateStr } from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
-import type { TransactionType } from "@/types";
+import type { TransactionType, PaymentMethod } from "@/types";
 
 interface Category {
   id: number;
   name: string;
   color: string;
+}
+
+interface BankAccount {
+  id: number;
+  name: string;
+  credit_enabled: number;
+  debit_enabled: number;
+  pix_enabled: number;
+  closing_day: number | null;
+  due_day: number | null;
+  default_payment_method?: PaymentMethod | null;
 }
 
 interface Props {
@@ -36,6 +47,9 @@ interface Props {
   initialCategoryId?: number | null;
   initialNote?: string | null;
   enableInstallments?: boolean;
+  accounts?: BankAccount[];
+  initialAccountId?: number | null;
+  initialPaymentMethod?: PaymentMethod | null;
   onSubmit: (data: {
     name: string;
     amount: number;
@@ -43,6 +57,8 @@ interface Props {
     categoryId: number | null;
     note: string | null;
     installmentsCount?: number;
+    accountId?: number | null;
+    paymentMethod?: PaymentMethod | null;
   }) => void;
 }
 
@@ -63,6 +79,9 @@ export function TransactionForm({
   initialCategoryId,
   initialNote = "",
   enableInstallments = false,
+  accounts = [],
+  initialAccountId,
+  initialPaymentMethod,
   onSubmit,
 }: Props) {
   const colors = useThemeColors();
@@ -84,12 +103,30 @@ export function TransactionForm({
   const [note, setNote] = useState(initialNote ?? "");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [showAddAmountModal, setShowAddAmountModal] = useState(false);
   const [addAmountStr, setAddAmountStr] = useState("");
   const addAmountInputRef = useRef<TextInput>(null);
   const [categorySearch, setCategorySearch] = useState("");
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentsCountStr, setInstallmentsCountStr] = useState("2");
+  const [accountId, setAccountId] = useState<number | null>(initialAccountId ?? null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(initialPaymentMethod ?? null);
+
+  useEffect(() => {
+    if (!accountId || accounts.length === 0) return;
+    const acc = accounts.find((a) => a.id === accountId);
+    if (!acc) return;
+    const enabled: PaymentMethod[] = [];
+    if (acc.credit_enabled) enabled.push("credit");
+    if (acc.debit_enabled) enabled.push("debit");
+    if (acc.pix_enabled) enabled.push("pix");
+    if (enabled.length === 0) return;
+    const defaultPm = acc.default_payment_method && enabled.includes(acc.default_payment_method)
+      ? acc.default_payment_method
+      : enabled[0];
+    setPaymentMethod(defaultPm);
+  }, [accountId, accounts]);
 
   const closeCategoryPicker = () => setShowCategoryPicker(false);
   const closeAddAmountModal = () => {
@@ -139,6 +176,20 @@ export function TransactionForm({
       installmentsCount = parsedInstallments;
     }
 
+    let effectivePaymentMethod = paymentMethod;
+    if (accounts.length > 0 && accountId != null && (effectivePaymentMethod == null || effectivePaymentMethod === null)) {
+      const acc = accounts.find((a) => a.id === accountId);
+      if (acc) {
+        const enabled: PaymentMethod[] = [];
+        if (acc.credit_enabled) enabled.push("credit");
+        if (acc.debit_enabled) enabled.push("debit");
+        if (acc.pix_enabled) enabled.push("pix");
+        effectivePaymentMethod = (acc.default_payment_method && enabled.includes(acc.default_payment_method))
+          ? acc.default_payment_method
+          : enabled[0] ?? undefined;
+      }
+    }
+
     onSubmit({
       name: name.trim() || (type === "income" ? "Entrada" : "Despesa"),
       amount,
@@ -146,6 +197,8 @@ export function TransactionForm({
       categoryId: type === "expense" ? categoryId : null,
       note: note.trim() || null,
       installmentsCount,
+      accountId: accounts.length > 0 ? accountId : undefined,
+      paymentMethod: accounts.length > 0 ? (effectivePaymentMethod ?? paymentMethod) : undefined,
     });
   };
 
@@ -336,6 +389,103 @@ export function TransactionForm({
           />
         )}
       </View>
+
+      {accounts.length > 0 && (
+        <>
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>{pt.bankAccount}</Text>
+            <Pressable
+              onPress={() => setShowAccountPicker(true)}
+              style={[
+                styles.input,
+                styles.picker,
+                {
+                  backgroundColor: colors.theme.card,
+                  borderColor: colors.tabIconDefault,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  { fontSize: 16 },
+                  accountId ? { color: colors.text } : { color: colors.tabIconDefault },
+                ]}
+              >
+                {accountId
+                  ? accounts.find((a) => a.id === accountId)?.name ?? ""
+                  : pt.selectAccount}
+              </Text>
+              <FontAwesome name="chevron-right" size={16} color={colors.tabIconDefault} />
+            </Pressable>
+          </View>
+          {accountId && (() => {
+            const acc = accounts.find((a) => a.id === accountId);
+            if (!acc) return null;
+            const paymentOptions: { value: PaymentMethod; label: string }[] = [
+              ...(acc.credit_enabled ? [{ value: "credit" as const, label: pt.credit }] : []),
+              ...(acc.debit_enabled ? [{ value: "debit" as const, label: pt.debit }] : []),
+              ...(acc.pix_enabled ? [{ value: "pix" as const, label: pt.pix }] : []),
+            ];
+            if (paymentOptions.length === 0) return null;
+            return (
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>{pt.paymentMethod}</Text>
+                <View style={styles.paymentMethodChips}>
+                  {paymentOptions.map((opt) => {
+                    const isSelected = paymentMethod === opt.value;
+                    return (
+                      <Pressable
+                        key={opt.value}
+                        onPress={() => setPaymentMethod(opt.value)}
+                        style={[
+                          styles.paymentMethodChip,
+                          {
+                            backgroundColor: isSelected ? colors.tint + "30" : colors.theme.card,
+                            borderColor: isSelected ? colors.tint : colors.tabIconDefault + "60",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.paymentMethodChipText,
+                            { color: isSelected ? colors.tint : colors.text },
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })()}
+          <Modal visible={showAccountPicker} transparent animationType="fade">
+            <Pressable style={styles.inlineModalOverlay} onPress={() => setShowAccountPicker(false)}>
+              <Pressable
+                style={[styles.inlineModalContent, { backgroundColor: colors.theme.card }]}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <Text style={[styles.inlineModalTitle, { color: colors.text }]}>
+                  {pt.bankAccount}
+                </Text>
+                {accounts.map((a) => (
+                  <Pressable
+                    key={a.id}
+                    onPress={() => {
+                      setAccountId(a.id);
+                      setShowAccountPicker(false);
+                    }}
+                    style={styles.modalOption}
+                  >
+                    <Text style={{ color: colors.text }}>{a.name}</Text>
+                  </Pressable>
+                ))}
+              </Pressable>
+            </Pressable>
+          </Modal>
+        </>
+      )}
 
       {enableInstallments && (
         <View style={styles.field}>
@@ -684,6 +834,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  paymentMethodChips: {
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+  },
+  paymentMethodChip: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentMethodChipText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
   textArea: {
     minHeight: 80,
     textAlignVertical: "top",
@@ -785,5 +953,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.9,
+  },
+  modalOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
 });

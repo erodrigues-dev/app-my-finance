@@ -9,12 +9,21 @@ import { useThemeColors } from '@/hooks/useThemeColors';
 import { pt } from '@/locales/pt';
 import { getAllCategories } from '@/services/categoryService';
 import {
+  buildInvoiceSyncPayload,
   getCategorySpendingByMonth,
   getMonthlyTotals,
   getTransactionsByMonth,
   updateTransactionPaid,
 } from '@/services/transactionService';
-import { formatDateStr, getMonthRange, parseDateStr } from '@/utils/dateUtils';
+import { enqueueExpenseUpsert } from '@/services/remoteNotificationSyncService';
+import {
+  formatDateStr,
+  formatDateShort,
+  getInvoiceDueDate,
+  getMonthRange,
+  parseDateStr,
+} from '@/utils/dateUtils';
+import { getBankAccountById, getCreditInvoicePaid, setCreditInvoicePaid } from '@/services/bankAccountService';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
@@ -57,9 +66,11 @@ export default function HomeScreen() {
   const categories = useMemo(() => getAllCategories(), []);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [transactionsExpanded, setTransactionsExpanded] = useState(true);
-  const [plannedExpensesExpanded, setPlannedExpensesExpanded] = useState(true);
-  const [fixedExpensesExpanded, setFixedExpensesExpanded] = useState(true);
+  const [debitExpanded, setDebitExpanded] = useState(true);
+  const [creditExpanded, setCreditExpanded] = useState(true);
+  const [pixExpanded, setPixExpanded] = useState(true);
+  const [noPaymentMethodExpanded, setNoPaymentMethodExpanded] = useState(true);
+  const [expandedInvoices, setExpandedInvoices] = useState<Record<string, boolean>>({});
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
   const [draftFilter, setDraftFilter] = useState<FilterState>(EMPTY_FILTER);
@@ -139,51 +150,104 @@ export default function HomeScreen() {
     });
   }, [allTransactions, filter]);
 
-  const regularTransactions = useMemo(() => {
-    const list = filteredTransactions.filter(
-      (t) => t.fixed_expense_id == null && (t.planned ?? 0) !== 1
-    );
-    return [...list].sort((a, b) => {
-      const dateCmp = (b.date || '').localeCompare(a.date || '');
-      if (dateCmp !== 0) return dateCmp;
-      return (a.category_name || '').localeCompare(b.category_name || '');
-    });
-  }, [filteredTransactions]);
-
-  const plannedTransactions = useMemo(() => {
-    const list = filteredTransactions.filter(
-      (t) => t.fixed_expense_id == null && (t.planned ?? 0) === 1
-    );
-    return [...list].sort((a, b) => {
-      const paidCmp = (a.paid ?? 0) - (b.paid ?? 0);
-      if (paidCmp !== 0) return paidCmp;
-      const dateCmp = (a.date || '').localeCompare(b.date || '');
-      if (dateCmp !== 0) return dateCmp;
-      return (a.category_name || '').localeCompare(b.category_name || '');
-    });
-  }, [filteredTransactions]);
-
-  const fixedExpenseTransactions = useMemo(() => {
-    const list = filteredTransactions.filter((t) => t.fixed_expense_id != null);
-    return [...list].sort((a, b) => {
-      const paidCmp = (a.paid ?? 0) - (b.paid ?? 0);
-      if (paidCmp !== 0) return paidCmp;
-      const dateCmp = (a.date || '').localeCompare(b.date || '');
-      if (dateCmp !== 0) return dateCmp;
-      return (a.category_name || '').localeCompare(b.category_name || '');
-    });
-  }, [filteredTransactions]);
-
   const getSectionSubtotal = (transactions: typeof allTransactions) =>
     transactions.reduce((sum, tx) => {
       const sign = tx.type === 'income' ? 1 : -1;
       return sum + tx.amount * sign;
     }, 0);
 
-  const regularSubtotal = useMemo(() => getSectionSubtotal(regularTransactions), [regularTransactions]);
-  const plannedSubtotal = useMemo(() => getSectionSubtotal(plannedTransactions), [plannedTransactions]);
-  const fixedSubtotal = useMemo(() => getSectionSubtotal(fixedExpenseTransactions), [fixedExpenseTransactions]);
+  const sortByDateThenCategory = (a: typeof allTransactions[0], b: typeof allTransactions[0]) => {
+    const dateCmp = (b.date || '').localeCompare(a.date || '');
+    if (dateCmp !== 0) return dateCmp;
+    return (a.category_name || '').localeCompare(b.category_name || '');
+  };
+
+  const debitTransactions = useMemo(() => {
+    const list = filteredTransactions.filter((t) => t.payment_method === 'debit');
+    return [...list].sort(sortByDateThenCategory);
+  }, [filteredTransactions]);
+
+  const creditTransactions = useMemo(() => {
+    const list = filteredTransactions.filter((t) => t.payment_method === 'credit');
+    return [...list].sort(sortByDateThenCategory);
+  }, [filteredTransactions]);
+
+  const pixTransactions = useMemo(() => {
+    const list = filteredTransactions.filter((t) => t.payment_method === 'pix');
+    return [...list].sort(sortByDateThenCategory);
+  }, [filteredTransactions]);
+
+  const noPaymentMethodTransactions = useMemo(() => {
+    const list = filteredTransactions.filter(
+      (t) => t.payment_method !== 'credit' && t.payment_method !== 'debit' && t.payment_method !== 'pix'
+    );
+    return [...list].sort(sortByDateThenCategory);
+  }, [filteredTransactions]);
+
+  const debitSubtotal = useMemo(() => getSectionSubtotal(debitTransactions), [debitTransactions]);
+  const creditSubtotal = useMemo(() => getSectionSubtotal(creditTransactions), [creditTransactions]);
+  const pixSubtotal = useMemo(() => getSectionSubtotal(pixTransactions), [pixTransactions]);
+  const noPaymentMethodSubtotal = useMemo(
+    () => getSectionSubtotal(noPaymentMethodTransactions),
+    [noPaymentMethodTransactions]
+  );
   const filteredTotal = useMemo(() => getSectionSubtotal(filteredTransactions), [filteredTransactions]);
+
+  type CreditInvoiceGroup = {
+    key: string;
+    accountId: number;
+    invoiceMonth: string;
+    accountName: string;
+    dueDate: string;
+    total: number;
+    transactions: typeof creditTransactions;
+  };
+  const creditInvoices = useMemo((): CreditInvoiceGroup[] => {
+    const map = new Map<string, typeof creditTransactions>();
+    for (const tx of creditTransactions) {
+      const aid = tx.account_id;
+      const im = tx.invoice_month;
+      if (aid == null || im == null) continue;
+      const k = `${aid}_${im}`;
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(tx);
+    }
+    const result: CreditInvoiceGroup[] = [];
+    for (const [k, txs] of map) {
+      const [accountIdStr, ...monthParts] = k.split('_');
+      const invoiceMonthFull = monthParts.join('_');
+      const accountId = parseInt(accountIdStr!, 10);
+      const account = getBankAccountById(accountId);
+      const dueDate =
+        account?.due_day != null
+          ? getInvoiceDueDate(invoiceMonthFull, account.due_day)
+          : '';
+      const total = getSectionSubtotal(txs);
+      const accountName = txs[0]?.account_name ?? account?.name ?? 'Conta';
+      result.push({
+        key: k,
+        accountId,
+        invoiceMonth: invoiceMonthFull,
+        accountName,
+        dueDate,
+        total,
+        transactions: txs,
+      });
+    }
+    result.sort((a, b) => a.invoiceMonth.localeCompare(b.invoiceMonth) || a.accountName.localeCompare(b.accountName));
+    return result;
+  }, [creditTransactions]);
+
+  const handleToggleInvoicePaid = (accountId: number, invoiceMonth: string, paid: number) => {
+    setCreditInvoicePaid(accountId, invoiceMonth, paid);
+    const payload = buildInvoiceSyncPayload(
+      accountId,
+      invoiceMonth,
+      paid === 1 ? 'paid' : 'pending',
+    );
+    void enqueueExpenseUpsert(payload);
+    setRefreshKey((k) => k + 1);
+  };
 
   const handleTogglePaid = (id: number, paid: number) => {
     updateTransactionPaid({ id, paid });
@@ -339,54 +403,17 @@ export default function HomeScreen() {
         </View>
       )}
 
-      <View style={styles.section}>
-        <Pressable
-          onPress={() => setTransactionsExpanded((e) => !e)}
-          style={({ pressed }) => [
-            styles.sectionHeader,
-            pressed && styles.pressed,
-          ]}
-        >
-          <View>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {pt.transactions}
-            </Text>
-            <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
-              {pt.subtotal}: {formatCurrency(regularSubtotal)}
-            </Text>
-          </View>
-          <FontAwesome
-            name={transactionsExpanded ? 'chevron-down' : 'chevron-right'}
-            size={18}
-            color={colors.tabIconDefault}
-          />
-        </Pressable>
-        {transactionsExpanded && (
-          <>
-            {regularTransactions.length === 0 ? (
-              <Text
-                style={[styles.emptyText, { color: colors.tabIconDefault }]}
-              >
-                {isFilterActive
-                  ? 'Nenhuma transação encontrada com os filtros aplicados'
-                  : pt.noTransactions}
-              </Text>
-            ) : (
-              regularTransactions.map((tx) => (
-                <TransactionListItem
-                  key={tx.id}
-                  transaction={tx}
-                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                />
-              ))
-            )}
-          </>
-        )}
-      </View>
-
-      <View style={styles.section}>
+      {[
+        { key: 'debit', title: pt.debit, list: debitTransactions, subtotal: debitSubtotal, expanded: debitExpanded, setExpanded: setDebitExpanded },
+        { key: 'credit', title: pt.credit, list: creditTransactions, subtotal: creditSubtotal, expanded: creditExpanded, setExpanded: setCreditExpanded },
+        { key: 'pix', title: pt.pix, list: pixTransactions, subtotal: pixSubtotal, expanded: pixExpanded, setExpanded: setPixExpanded },
+        { key: 'none', title: pt.noPaymentMethodGroup, list: noPaymentMethodTransactions, subtotal: noPaymentMethodSubtotal, expanded: noPaymentMethodExpanded, setExpanded: setNoPaymentMethodExpanded },
+      ]
+        .filter(({ list }) => list.length > 0)
+        .map(({ key, title, list, subtotal, expanded, setExpanded }) => (
+        <View key={key} style={styles.section}>
           <Pressable
-            onPress={() => setPlannedExpensesExpanded((e) => !e)}
+            onPress={() => setExpanded((e: boolean) => !e)}
             style={({ pressed }) => [
               styles.sectionHeader,
               pressed && styles.pressed,
@@ -394,29 +421,144 @@ export default function HomeScreen() {
           >
             <View>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                {pt.planned}
+                {title}
               </Text>
               <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
-                {pt.subtotal}: {formatCurrency(plannedSubtotal)}
+                {pt.subtotal}: {formatCurrency(subtotal)}
               </Text>
             </View>
             <FontAwesome
-              name={plannedExpensesExpanded ? 'chevron-down' : 'chevron-right'}
+              name={expanded ? 'chevron-down' : 'chevron-right'}
               size={18}
               color={colors.tabIconDefault}
             />
           </Pressable>
-          {plannedExpensesExpanded && (
+          {expanded && (
             <>
-              {plannedTransactions.length === 0 ? (
+              {key === 'credit' ? (
+                creditInvoices.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+                    {isFilterActive
+                      ? 'Nenhuma transação encontrada com os filtros aplicados'
+                      : pt.noTransactions}
+                  </Text>
+                ) : (
+                  creditInvoices.map((fatura) => {
+                    const paid = getCreditInvoicePaid(fatura.accountId, fatura.invoiceMonth);
+                    const isInvoiceExpanded = expandedInvoices[fatura.key] !== false;
+                    const toggleInvoiceExpanded = () => {
+                      setExpandedInvoices((prev) => ({
+                        ...prev,
+                        [fatura.key]: !isInvoiceExpanded,
+                      }));
+                    };
+                    return (
+                      <View
+                        key={fatura.key}
+                        style={[styles.invoiceBlock, { backgroundColor: colors.theme.card }]}
+                      >
+                        <View style={styles.invoiceHeaderRow}>
+                          <Pressable
+                            onPress={() =>
+                              handleToggleInvoicePaid(fatura.accountId, fatura.invoiceMonth, paid ? 0 : 1)
+                            }
+                            hitSlop={12}
+                            style={[
+                              styles.invoiceCheckbox,
+                              {
+                                borderColor: colors.tabIconDefault,
+                                backgroundColor: paid ? (colors.expense ?? '#e74c3c') + '40' : 'transparent',
+                              },
+                            ]}
+                          >
+                            {paid && (
+                              <FontAwesome
+                                name="check"
+                                size={12}
+                                color={colors.expense ?? '#e74c3c'}
+                              />
+                            )}
+                          </Pressable>
+                          <Pressable
+                            onPress={toggleInvoiceExpanded}
+                            style={styles.invoiceHeaderMain}
+                            hitSlop={8}
+                          >
+                            <View style={styles.invoiceHeaderLeft}>
+                              <Text style={[styles.invoiceTitle, { color: colors.text }]}>
+                                {fatura.accountName} – {fatura.invoiceMonth}
+                              </Text>
+                              <Text style={[styles.invoiceMeta, { color: colors.tabIconDefault }]}>
+                                {pt.subtotal}: {formatCurrency(fatura.total)}
+                                {fatura.dueDate ? ` · Venc: ${formatDateShort(fatura.dueDate)}` : ''}
+                              </Text>
+                            </View>
+                            <FontAwesome
+                              name={isInvoiceExpanded ? 'chevron-down' : 'chevron-right'}
+                              size={16}
+                              color={colors.tabIconDefault}
+                              style={styles.invoiceChevron}
+                            />
+                          </Pressable>
+                        </View>
+                        {isInvoiceExpanded && (
+                          <View style={styles.invoiceTransactionsWrap}>
+                            {fatura.transactions.map((tx) =>
+                              tx.fixed_expense_id != null ? (
+                                <FixedExpenseListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
+                                <PlannedIncomeListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
+                                <FixedExpenseListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : (
+                                <TransactionListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              )
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })
+                )
+              ) : list.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
                   {isFilterActive
-                    ? 'Nenhum item planejado encontrado com os filtros aplicados'
-                    : pt.noPlanned}
+                    ? 'Nenhuma transação encontrada com os filtros aplicados'
+                    : pt.noTransactions}
                 </Text>
               ) : (
-                plannedTransactions.map((tx) =>
-                  tx.type === 'expense' ? (
+                list.map((tx) =>
+                  tx.fixed_expense_id != null ? (
+                    <FixedExpenseListItem
+                      key={tx.id}
+                      transaction={tx}
+                      onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                      onTogglePaid={handleTogglePaid}
+                    />
+                  ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
+                    <PlannedIncomeListItem
+                      key={tx.id}
+                      transaction={tx}
+                      onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                      onTogglePaid={handleTogglePaid}
+                    />
+                  ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
                     <FixedExpenseListItem
                       key={tx.id}
                       transaction={tx}
@@ -424,64 +566,18 @@ export default function HomeScreen() {
                       onTogglePaid={handleTogglePaid}
                     />
                   ) : (
-                    <PlannedIncomeListItem
+                    <TransactionListItem
                       key={tx.id}
                       transaction={tx}
                       onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                      onTogglePaid={handleTogglePaid}
                     />
                   )
                 )
               )}
             </>
           )}
-      </View>
-
-      <View style={styles.section}>
-        <Pressable
-          onPress={() => setFixedExpensesExpanded((e) => !e)}
-          style={({ pressed }) => [
-            styles.sectionHeader,
-            pressed && styles.pressed,
-          ]}
-        >
-          <View>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {pt.fixedExpenses}
-            </Text>
-            <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
-              {pt.subtotal}: {formatCurrency(fixedSubtotal)}
-            </Text>
-          </View>
-          <FontAwesome
-            name={fixedExpensesExpanded ? 'chevron-down' : 'chevron-right'}
-            size={18}
-            color={colors.tabIconDefault}
-          />
-        </Pressable>
-        {fixedExpensesExpanded && (
-          <>
-            {fixedExpenseTransactions.length === 0 ? (
-              <Text
-                style={[styles.emptyText, { color: colors.tabIconDefault }]}
-              >
-                {isFilterActive
-                  ? 'Nenhum gasto fixo encontrado com os filtros aplicados'
-                  : pt.noFixedExpenses}
-              </Text>
-            ) : (
-              fixedExpenseTransactions.map((tx) => (
-                <FixedExpenseListItem
-                  key={tx.id}
-                  transaction={tx}
-                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                  onTogglePaid={handleTogglePaid}
-                />
-              ))
-            )}
-          </>
-        )}
-      </View>
+        </View>
+      ))}
 
       {isFilterActive && (
         <View
@@ -812,6 +908,53 @@ const styles = StyleSheet.create({
   emptyText: {
     marginHorizontal: 16,
     fontSize: 15,
+  },
+  invoiceBlock: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    padding: 12,
+  },
+  invoiceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  invoiceHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  invoiceHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  invoiceTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  invoiceMeta: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  invoiceChevron: {
+    marginLeft: 8,
+  },
+  invoiceCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  invoiceTransactionsWrap: {
+    marginLeft: -32,
+    marginRight: -16,
+    marginTop: 4,
   },
   headerActions: {
     flexDirection: 'row',

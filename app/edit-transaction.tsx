@@ -15,8 +15,11 @@ import {
   deleteTransaction,
 } from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
-import { getMonthYearFromDateStr, isDateInFutureMonth } from "@/utils/dateUtils";
+import { getAllBankAccounts } from "@/services/bankAccountService";
+import { getBankAccountById } from "@/services/bankAccountService";
+import { getMonthYearFromDateStr, isDateInFutureMonth, getInvoiceMonth } from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
+import type { PaymentMethod } from "@/types";
 
 export default function EditTransactionScreen() {
   const router = useRouter();
@@ -25,6 +28,7 @@ export default function EditTransactionScreen() {
   const { selectedMonth } = useMonth();
   const { showToast } = useToast();
   const categories = getAllCategories();
+  const accounts = getAllBankAccounts();
   const [transaction, setTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
@@ -52,6 +56,8 @@ export default function EditTransactionScreen() {
     date: string;
     categoryId: number | null;
     note: string | null;
+    accountId?: number | null;
+    paymentMethod?: PaymentMethod | null;
   }) => {
     const installmentGroupId = transaction.installment_group_id ?? undefined;
     const normalizedBaseName = data.name.trim().replace(/\s\(\d+\/\d+\)$/, "");
@@ -74,6 +80,17 @@ export default function EditTransactionScreen() {
     } else {
       planned = isDateInFutureMonth(data.date) ? 1 : 0;
     }
+
+    const accountId = data.accountId ?? null;
+    const paymentMethod = data.paymentMethod ?? null;
+    let invoiceMonth: string | null = null;
+    if (paymentMethod === "credit" && accountId) {
+      const acc = getBankAccountById(accountId);
+      if (acc?.credit_enabled === 1 && acc.closing_day != null) {
+        invoiceMonth = getInvoiceMonth(data.date, acc.closing_day);
+      }
+    }
+
     updateTransaction({
       id: transaction.id,
       type: transaction.type,
@@ -86,6 +103,9 @@ export default function EditTransactionScreen() {
       installmentGroupId,
       paid: transaction.paid ?? 0,
       planned,
+      accountId,
+      paymentMethod,
+      invoiceMonth,
     });
     if (installmentGroupId != null) {
       updateFutureInstallmentsFromAnchor({
@@ -96,6 +116,8 @@ export default function EditTransactionScreen() {
         amount: data.amount,
         categoryId: data.categoryId,
         note: data.note,
+        accountId,
+        paymentMethod,
       });
     }
     const { month, year } = getMonthYearFromDateStr(data.date);
@@ -152,6 +174,9 @@ export default function EditTransactionScreen() {
         <TransactionForm
           type={transaction.type}
           categories={categories}
+          accounts={accounts}
+          initialAccountId={transaction.account_id ?? null}
+          initialPaymentMethod={transaction.payment_method ?? null}
           initialName={transaction.name}
           initialAmount={transaction.amount}
           initialDate={transaction.date}

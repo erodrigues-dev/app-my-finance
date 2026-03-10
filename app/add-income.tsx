@@ -12,6 +12,7 @@ import {
   updateTransactionInstallmentGroup,
 } from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
+import { getDefaultBankAccount, getAllBankAccounts } from "@/services/bankAccountService";
 import {
   formatDateStr,
   getInitialDateForNewTransaction,
@@ -20,6 +21,7 @@ import {
   parseDateStr,
 } from "@/utils/dateUtils";
 import { pt } from "@/locales/pt";
+import type { PaymentMethod } from "@/types";
 
 export default function AddIncomeScreen() {
   const router = useRouter();
@@ -28,6 +30,8 @@ export default function AddIncomeScreen() {
   const { selectedMonth } = useMonth();
   const { showToast } = useToast();
   const categories = getAllCategories();
+  const accounts = getAllBankAccounts();
+  const defaultAccount = getDefaultBankAccount();
 
   const duplicateSource = duplicateId
     ? (() => {
@@ -43,9 +47,14 @@ export default function AddIncomeScreen() {
     categoryId: number | null;
     note: string | null;
     installmentsCount?: number;
+    accountId?: number | null;
+    paymentMethod?: PaymentMethod | null;
   }) => {
     const installmentsCount = Math.max(1, data.installmentsCount ?? 1);
     const baseDate = parseDateStr(data.date);
+    const accountId = data.accountId ?? null;
+    const paymentMethod = data.paymentMethod ?? null;
+
     if (installmentsCount === 1) {
       const planned = isDateInFutureMonth(data.date) ? 1 : 0;
       createTransaction({
@@ -56,6 +65,8 @@ export default function AddIncomeScreen() {
         categoryId: null,
         note: data.note,
         planned,
+        accountId,
+        paymentMethod,
       });
     } else {
       const firstName = `${data.name} (1/${installmentsCount})`;
@@ -67,6 +78,8 @@ export default function AddIncomeScreen() {
         categoryId: null,
         note: data.note,
         planned: isDateInFutureMonth(data.date) ? 1 : 0,
+        accountId,
+        paymentMethod,
       });
       updateTransactionInstallmentGroup({
         id: firstId,
@@ -87,6 +100,8 @@ export default function AddIncomeScreen() {
           note: data.note,
           installmentGroupId: firstId,
           planned,
+          accountId,
+          paymentMethod,
         });
       }
     }
@@ -106,6 +121,9 @@ export default function AddIncomeScreen() {
         key={duplicateId ?? "new"}
         type="income"
         categories={categories}
+        accounts={accounts}
+        initialAccountId={duplicateSource?.account_id ?? defaultAccount?.id ?? null}
+        initialPaymentMethod={duplicateSource?.payment_method ?? null}
         initialName={duplicateSource?.name}
         initialAmount={duplicateSource?.amount}
         initialDate={duplicateSource?.date ?? getInitialDateForNewTransaction(selectedMonth)}

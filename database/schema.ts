@@ -1,4 +1,4 @@
-export const schemaVersion = 1;
+export const schemaVersion = 2;
 
 export const migrations = [
   `CREATE TABLE IF NOT EXISTS categories (
@@ -34,4 +34,26 @@ export const migrations = [
   `ALTER TABLE transactions ADD COLUMN planned INTEGER DEFAULT 0`,
   `ALTER TABLE transactions ADD COLUMN installment_group_id INTEGER`,
   `CREATE INDEX IF NOT EXISTS idx_transactions_installment_group ON transactions(installment_group_id, date, id)`,
+  `CREATE TABLE IF NOT EXISTS bank_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    credit_enabled INTEGER NOT NULL DEFAULT 0,
+    debit_enabled INTEGER NOT NULL DEFAULT 0,
+    pix_enabled INTEGER NOT NULL DEFAULT 0,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    closing_day INTEGER,
+    due_day INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS credit_invoice_payments (
+    account_id INTEGER NOT NULL,
+    invoice_month TEXT NOT NULL,
+    paid INTEGER NOT NULL DEFAULT 0,
+    paid_at TEXT,
+    PRIMARY KEY (account_id, invoice_month),
+    FOREIGN KEY (account_id) REFERENCES bank_accounts(id)
+  )`,
+  `ALTER TABLE transactions ADD COLUMN account_id INTEGER REFERENCES bank_accounts(id)`,
+  `ALTER TABLE transactions ADD COLUMN payment_method TEXT CHECK(payment_method IS NULL OR payment_method IN ('credit','debit','pix'))`,
+  `ALTER TABLE transactions ADD COLUMN invoice_month TEXT`,
+  `ALTER TABLE bank_accounts ADD COLUMN default_payment_method TEXT CHECK(default_payment_method IS NULL OR default_payment_method IN ('credit','debit','pix'))`,
 ];
