@@ -9,6 +9,7 @@ import {
   getMonthlyTotals,
   getCategorySpendingByMonth,
 } from "@/services/transactionService";
+import { getAllCategories } from "@/services/categoryService";
 import { PieChart } from "@/components/PieChart";
 import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
 import { pt } from "@/locales/pt";
@@ -78,6 +79,11 @@ export default function ChartsScreen() {
     });
   }, [selectedMonth, refreshKey]);
 
+  const totalPlanned = useMemo(() => {
+    const categories = getAllCategories();
+    return categories.reduce((sum, c) => sum + (c.limit ?? 0), 0);
+  }, [refreshKey]);
+
   const maxSpent = Math.max(
     ...categorySpending.map((c) => c.spent),
     expense,
@@ -136,7 +142,7 @@ export default function ChartsScreen() {
                 style={[
                   styles.totalsBar,
                   {
-                    width: `${Math.min(100, (expense / maxSpent) * 100)}%`,
+                    width: `${Math.min(100, totalPlanned > 0 ? (expense / totalPlanned) * 100 : (expense / maxSpent) * 100)}%`,
                     backgroundColor: getExpenseBarColor(expense, income, colors.expense),
                   },
                 ]}
@@ -148,7 +154,9 @@ export default function ChartsScreen() {
                 { color: getExpenseBarColor(expense, income, colors.expense) },
               ]}
             >
-              {formatCurrency(expense)}
+              {totalPlanned > 0
+                ? `${formatCurrency(expense)} / ${formatCurrency(totalPlanned)}`
+                : formatCurrency(expense)}
             </Text>
           </View>
         </View>

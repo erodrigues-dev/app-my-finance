@@ -617,6 +617,7 @@ export function getCategorySpendingByMonth({ month, year }: MonthYear): {
 }[] {
   const db = getDb();
   const { startDate, endDate } = getMonthRange(month, year);
+  const invoiceMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
   const rows = db.getAllSync<{
     category_id: number;
@@ -629,11 +630,16 @@ export function getCategorySpendingByMonth({ month, year }: MonthYear): {
             COALESCE(SUM(t.amount), 0) as spent,
             c.spending_limit as category_limit, c.color as category_color
      FROM categories c
-     LEFT JOIN transactions t ON t.category_id = c.id AND t.type = 'expense' AND t.date >= ? AND t.date < ?
+     LEFT JOIN transactions t ON t.category_id = c.id AND t.type = 'expense'
+       AND (
+         (t.date >= ? AND t.date < ? AND (t.payment_method IS NULL OR t.payment_method != 'credit'))
+         OR (t.payment_method = 'credit' AND t.invoice_month = ?)
+       )
      GROUP BY c.id, c.name, c.spending_limit, c.color
      HAVING spent > 0`,
     startDate,
     endDate,
+    invoiceMonthStr,
   );
 
   return rows
