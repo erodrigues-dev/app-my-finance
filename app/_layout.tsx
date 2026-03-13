@@ -12,6 +12,7 @@ import FirstLaunchModal from '@/components/FirstLaunchModal';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { FabHeightProvider } from '@/context/FabHeightContext';
 import { FabPositionProvider } from '@/context/FabPositionContext';
+import { InitialHomeFilterProvider } from '@/context/InitialHomeFilterContext';
 import { MonthProvider } from '@/context/MonthContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { ToastProvider } from '@/context/ToastContext';
@@ -66,56 +67,58 @@ function RootLayoutNav() {
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <MonthProvider>
-        <ToastProvider>
-          <Stack
-            screenOptions={{
-              headerStyle: { backgroundColor: colors.background },
-              headerTintColor: colors.text,
-            }}
-          >
-            <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
-            <Stack.Screen
-              name='add-income'
-              options={{ presentation: 'modal', title: 'Adicionar Entrada' }}
-            />
-            <Stack.Screen
-              name='add-expense'
-              options={{ presentation: 'modal', title: 'Adicionar Saída' }}
-            />
-            <Stack.Screen
-              name='edit-transaction'
-              options={{ presentation: 'modal', title: 'Editar Transação' }}
-            />
-            <Stack.Screen
-              name='month-picker'
-              options={{ presentation: 'modal', title: 'Selecionar mês' }}
-            />
-            <Stack.Screen
-              name='add-fixed-expense'
-              options={{ presentation: 'modal', title: 'Adicionar gasto fixo' }}
-            />
-            <Stack.Screen
-              name='edit-fixed-expense'
-              options={{ presentation: 'modal', title: 'Editar gasto fixo' }}
-            />
-            <Stack.Screen
-              name='categories'
-              options={{ title: pt.categories }}
-            />
-            <Stack.Screen
-              name='bank-accounts'
-              options={{ title: 'Contas bancárias' }}
-            />
-            <Stack.Screen
-              name='add-bank-account'
-              options={{ presentation: 'modal', title: 'Adicionar conta' }}
-            />
-            <Stack.Screen
-              name='edit-bank-account'
-              options={{ presentation: 'modal', title: 'Editar conta' }}
-            />
-          </Stack>
-        </ToastProvider>
+        <InitialHomeFilterProvider>
+          <ToastProvider>
+            <Stack
+                screenOptions={{
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.text,
+              }}
+            >
+              <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
+              <Stack.Screen
+                name='add-income'
+                options={{ presentation: 'modal', title: 'Adicionar Entrada' }}
+              />
+              <Stack.Screen
+                name='add-expense'
+                options={{ presentation: 'modal', title: 'Adicionar Saída' }}
+              />
+              <Stack.Screen
+                name='edit-transaction'
+                options={{ presentation: 'modal', title: 'Editar Transação' }}
+              />
+              <Stack.Screen
+                name='month-picker'
+                options={{ presentation: 'modal', title: 'Selecionar mês' }}
+              />
+              <Stack.Screen
+                name='add-fixed-expense'
+                options={{ presentation: 'modal', title: 'Adicionar gasto fixo' }}
+              />
+              <Stack.Screen
+                name='edit-fixed-expense'
+                options={{ presentation: 'modal', title: 'Editar gasto fixo' }}
+              />
+              <Stack.Screen
+                name='categories'
+                options={{ title: pt.categories }}
+              />
+              <Stack.Screen
+                name='bank-accounts'
+                options={{ title: 'Contas bancárias' }}
+              />
+              <Stack.Screen
+                name='add-bank-account'
+                options={{ presentation: 'modal', title: 'Adicionar conta' }}
+              />
+              <Stack.Screen
+                name='edit-bank-account'
+                options={{ presentation: 'modal', title: 'Editar conta' }}
+              />
+            </Stack>
+          </ToastProvider>
+        </InitialHomeFilterProvider>
       </MonthProvider>
     </>
   );

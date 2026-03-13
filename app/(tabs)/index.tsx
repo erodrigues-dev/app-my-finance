@@ -6,6 +6,7 @@ import { ValuesVisibilityButton } from '@/components/ValuesVisibilityButton';
 import { useMonth } from '@/context/MonthContext';
 import { useValuesVisibility } from '@/context/ValuesVisibilityContext';
 import { useFabPosition } from '@/context/FabPositionContext';
+import { useInitialHomeFilter } from '@/context/InitialHomeFilterContext';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { pt } from '@/locales/pt';
 import { getAllCategories } from '@/services/categoryService';
@@ -76,6 +77,7 @@ export default function HomeScreen() {
   const colors = useThemeColors();
   const fabContainerStyle = useFabContainerStyle();
   const { fabPosition } = useFabPosition();
+  const { initialFilter, setInitialFilter } = useInitialHomeFilter();
   const { formatCurrency } = useValuesVisibility();
   const { selectedMonth } = useMonth();
   const categories = useMemo(() => getAllCategories(), []);
@@ -152,7 +154,20 @@ export default function HomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       setRefreshKey((k) => k + 1);
-    }, []),
+      if (initialFilter) {
+        setFilter({
+          ...EMPTY_FILTER,
+          transactionType: initialFilter.transactionType,
+          categoryIds: initialFilter.categoryIds,
+        });
+        setDraftFilter({
+          ...EMPTY_FILTER,
+          transactionType: initialFilter.transactionType,
+          categoryIds: initialFilter.categoryIds,
+        });
+        setInitialFilter(null);
+      }
+    }, [initialFilter, setInitialFilter]),
   );
 
   const { income, expense, balance } = useMemo(

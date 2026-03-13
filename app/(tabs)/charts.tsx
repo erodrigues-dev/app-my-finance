@@ -1,7 +1,7 @@
 import { getDate, isSameMonth } from "date-fns";
 import React, { useMemo, useState } from "react";
-import { View, Text, ScrollView, StyleSheet } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { useMonth } from "@/context/MonthContext";
 import { MonthSelector } from "@/components/MonthSelector";
@@ -11,6 +11,7 @@ import {
 } from "@/services/transactionService";
 import { getAllCategories } from "@/services/categoryService";
 import { PieChart } from "@/components/PieChart";
+import { useInitialHomeFilter } from "@/context/InitialHomeFilterContext";
 import { useValuesVisibility } from "@/context/ValuesVisibilityContext";
 import { pt } from "@/locales/pt";
 
@@ -54,9 +55,16 @@ function lerpColor(hex1: string, hex2: string, t: number): string {
 
 export default function ChartsScreen() {
   const colors = useThemeColors();
+  const router = useRouter();
+  const { setInitialFilter } = useInitialHomeFilter();
   const { formatCurrency, valuesVisible } = useValuesVisibility();
   const { selectedMonth } = useMonth();
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const navigateToHomeWithFilter = (transactionType: "income" | "expense", categoryIds: number[]) => {
+    setInitialFilter({ transactionType, categoryIds });
+    router.navigate("/(tabs)");
+  };
 
   useFocusEffect(
     React.useCallback(() => {
@@ -114,7 +122,10 @@ export default function ChartsScreen() {
           {pt.incomeVsExpense}
         </Text>
         <View style={[styles.card, { backgroundColor: colors.theme.card }]}>
-          <View style={styles.totalsRow}>
+          <Pressable
+            style={({ pressed }) => [styles.totalsRow, pressed && { opacity: 0.7 }]}
+            onPress={() => navigateToHomeWithFilter("income", [])}
+          >
             <Text style={[styles.totalsLabel, { color: colors.text }]}>
               {pt.totalIncome}
             </Text>
@@ -132,8 +143,11 @@ export default function ChartsScreen() {
             <Text style={[styles.totalsValue, { color: colors.income }]}>
               {formatCurrency(income)}
             </Text>
-          </View>
-          <View style={styles.totalsRow}>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.totalsRow, pressed && { opacity: 0.7 }]}
+            onPress={() => navigateToHomeWithFilter("expense", [])}
+          >
             <Text style={[styles.totalsLabel, { color: colors.text }]}>
               {pt.totalExpense}
             </Text>
@@ -158,7 +172,7 @@ export default function ChartsScreen() {
                 ? `${formatCurrency(expense)} / ${formatCurrency(totalPlanned)}`
                 : formatCurrency(expense)}
             </Text>
-          </View>
+          </Pressable>
         </View>
       </View>
 
@@ -185,7 +199,11 @@ export default function ChartsScreen() {
               const barColor = isOver ? colors.expense : c.color;
 
               return (
-                <View key={c.categoryId} style={styles.categoryRow}>
+                <Pressable
+                  key={c.categoryId}
+                  style={({ pressed }) => [styles.categoryRow, pressed && { opacity: 0.7 }]}
+                  onPress={() => navigateToHomeWithFilter("expense", [c.categoryId])}
+                >
                   <Text
                     style={[
                       styles.categoryName,
@@ -244,7 +262,7 @@ export default function ChartsScreen() {
                       </Text>
                     )}
                   </View>
-                </View>
+                </Pressable>
               );
             })
           )}
@@ -286,7 +304,11 @@ export default function ChartsScreen() {
                 <PieChart data={pieData} size={200} />
                 <View style={styles.pieLegend}>
                   {categorySpending.map((c) => (
-                    <View key={c.categoryId} style={styles.pieLegendItem}>
+                    <Pressable
+                      key={c.categoryId}
+                      style={({ pressed }) => [styles.pieLegendItem, pressed && { opacity: 0.7 }]}
+                      onPress={() => navigateToHomeWithFilter("expense", [c.categoryId])}
+                    >
                       <View
                         style={[
                           styles.pieLegendDot,
@@ -304,7 +326,7 @@ export default function ChartsScreen() {
                       >
                         {formatCurrency(c.spent)}
                       </Text>
-                    </View>
+                    </Pressable>
                   ))}
                   {livre > 0 && (
                     <View style={styles.pieLegendItem}>
