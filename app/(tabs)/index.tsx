@@ -218,6 +218,13 @@ export default function HomeScreen() {
     return (a.category_name || '').localeCompare(b.category_name || '');
   };
 
+  /** Data mais recente entre as transações do grupo (string YYYY-MM-DD). */
+  const getMaxTransactionDate = (transactions: typeof filteredTransactions) =>
+    transactions.reduce(
+      (max, tx) => ((tx.date || '') > max ? (tx.date || '') : max),
+      ''
+    );
+
   const debitTransactions = useMemo(() => {
     const list = filteredTransactions.filter((t) => t.payment_method === 'debit');
     return [...list].sort(sortByDateThenCategory);
@@ -310,6 +317,10 @@ export default function HomeScreen() {
     return Array.from(map.entries())
       .map(([key, value]) => ({ key, ...value }))
       .sort((a, b) => {
+        const maxDateA = getMaxTransactionDate(a.items);
+        const maxDateB = getMaxTransactionDate(b.items);
+        const dateCmp = maxDateB.localeCompare(maxDateA);
+        if (dateCmp !== 0) return dateCmp;
         if (a.isNoAccountNoPayment && !b.isNoAccountNoPayment) return 1;
         if (!a.isNoAccountNoPayment && b.isNoAccountNoPayment) return -1;
         return a.title.localeCompare(b.title, 'pt-BR');
@@ -357,9 +368,37 @@ export default function HomeScreen() {
         transactions: txs,
       });
     }
-    result.sort((a, b) => a.invoiceMonth.localeCompare(b.invoiceMonth) || a.accountName.localeCompare(b.accountName));
+    result.sort((a, b) => {
+      const maxDateA = getMaxTransactionDate(a.transactions);
+      const maxDateB = getMaxTransactionDate(b.transactions);
+      const dateCmp = maxDateB.localeCompare(maxDateA);
+      if (dateCmp !== 0) return dateCmp;
+      return a.invoiceMonth.localeCompare(b.invoiceMonth) || a.accountName.localeCompare(b.accountName);
+    });
     return result;
   }, [creditTransactions]);
+
+  const creditSectionFirst = useMemo(() => {
+    const maxCreditDate = creditInvoices.length
+      ? creditInvoices.reduce(
+          (m, inv) => {
+            const d = getMaxTransactionDate(inv.transactions);
+            return d > m ? d : m;
+          },
+          ''
+        )
+      : '';
+    const maxNonCreditDate = nonCreditGroups.length
+      ? nonCreditGroups.reduce(
+          (m, g) => {
+            const d = getMaxTransactionDate(g.items);
+            return d > m ? d : m;
+          },
+          ''
+        )
+      : '';
+    return maxCreditDate >= maxNonCreditDate;
+  }, [creditInvoices, nonCreditGroups]);
 
   const [expandedNonCreditGroups, setExpandedNonCreditGroups] = useState<Record<string, boolean>>({});
 
@@ -492,11 +531,24 @@ export default function HomeScreen() {
             {pt.categoriesOverLimit}
           </Text>
           {categoriesOverLimit.map((c) => (
-            <View
+            <Pressable
               key={c.categoryId}
-              style={[
+              onPress={() => {
+                setFilter((prev) => ({
+                  ...prev,
+                  transactionType: 'expense',
+                  categoryIds: [c.categoryId],
+                }));
+                setDraftFilter((prev) => ({
+                  ...prev,
+                  transactionType: 'expense',
+                  categoryIds: [c.categoryId],
+                }));
+              }}
+              style={({ pressed }) => [
                 styles.overLimitCard,
                 { backgroundColor: colors.theme.warning + '20' },
+                pressed && styles.pressed,
               ]}
             >
               <Text style={[styles.overLimitName, { color: colors.text }]}>
@@ -510,142 +562,142 @@ export default function HomeScreen() {
               >
                 {formatCurrency(c.spent)} / {formatCurrency(c.limit ?? 0)}
               </Text>
-            </View>
+            </Pressable>
           ))}
         </View>
       )}
 
-      {/* Seção Crédito (faturas) */}
-      {(creditTransactions.length > 0 || creditInvoices.length > 0) && (
-        <View style={styles.section}>
-          <Pressable
-            onPress={() => setCreditExpanded((e: boolean) => !e)}
-            style={({ pressed }) => [
-              styles.sectionHeader,
-              pressed && styles.pressed,
-            ]}
-          >
-            <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                {pt.credit}
-              </Text>
-              <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
-                {pt.subtotal}: {formatCurrency(creditSubtotal)}
-              </Text>
-            </View>
-            <FontAwesome
-              name={creditExpanded ? 'chevron-down' : 'chevron-right'}
-              size={18}
-              color={colors.tabIconDefault}
-            />
-          </Pressable>
-          {creditExpanded && (
-            creditInvoices.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
-                {isFilterActive
-                  ? 'Nenhuma transação encontrada com os filtros aplicados'
-                  : pt.noTransactions}
-              </Text>
-            ) : (
-              creditInvoices.map((fatura) => {
-                const paid = getCreditInvoicePaid(fatura.accountId, fatura.invoiceMonth);
-                const isInvoiceExpanded = expandedInvoices[fatura.key] !== false;
-                const toggleInvoiceExpanded = () => {
-                  setExpandedInvoices((prev) => ({
-                    ...prev,
-                    [fatura.key]: !isInvoiceExpanded,
-                  }));
-                };
-                return (
-                  <View
-                    key={fatura.key}
-                    style={[styles.invoiceBlock, { backgroundColor: colors.theme.card }]}
-                  >
-                    <View style={styles.invoiceHeaderRow}>
-                      <Pressable
-                        onPress={() =>
-                          handleToggleInvoicePaid(fatura.accountId, fatura.invoiceMonth, paid ? 0 : 1)
-                        }
-                        hitSlop={12}
-                        style={[
-                          styles.invoiceCheckbox,
-                          {
-                            borderColor: colors.tabIconDefault,
-                            backgroundColor: paid ? (colors.expense ?? '#e74c3c') + '40' : 'transparent',
-                          },
-                        ]}
+      {/* Seções Crédito e Não-crédito ordenadas pela data da última transação (mais recente no topo) */}
+      {creditSectionFirst ? (
+        <>
+          {(creditTransactions.length > 0 || creditInvoices.length > 0) && (
+            <View style={styles.section}>
+              <Pressable
+                onPress={() => setCreditExpanded((e: boolean) => !e)}
+                style={({ pressed }) => [
+                  styles.sectionHeader,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    {pt.credit}
+                  </Text>
+                  <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
+                    {pt.subtotal}: {formatCurrency(creditSubtotal)}
+                  </Text>
+                </View>
+                <FontAwesome
+                  name={creditExpanded ? 'chevron-down' : 'chevron-right'}
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              </Pressable>
+              {creditExpanded && (
+                creditInvoices.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+                    {isFilterActive
+                      ? 'Nenhuma transação encontrada com os filtros aplicados'
+                      : pt.noTransactions}
+                  </Text>
+                ) : (
+                  creditInvoices.map((fatura) => {
+                    const paid = getCreditInvoicePaid(fatura.accountId, fatura.invoiceMonth);
+                    const isInvoiceExpanded = expandedInvoices[fatura.key] !== false;
+                    const toggleInvoiceExpanded = () => {
+                      setExpandedInvoices((prev) => ({
+                        ...prev,
+                        [fatura.key]: !isInvoiceExpanded,
+                      }));
+                    };
+                    return (
+                      <View
+                        key={fatura.key}
+                        style={[styles.invoiceBlock, { backgroundColor: colors.theme.card }]}
                       >
-                        {paid && (
-                          <FontAwesome
-                            name="check"
-                            size={12}
-                            color={colors.expense ?? '#e74c3c'}
-                          />
-                        )}
-                      </Pressable>
-                      <Pressable
-                        onPress={toggleInvoiceExpanded}
-                        style={styles.invoiceHeaderMain}
-                        hitSlop={8}
-                      >
-                        <View style={styles.invoiceHeaderLeft}>
-                          <Text style={[styles.invoiceTitle, { color: colors.text }]}>
-                            {fatura.accountName} – {fatura.invoiceMonth}
-                          </Text>
-                          <Text style={[styles.invoiceMeta, { color: colors.tabIconDefault }]}>
-                            {pt.subtotal}: {formatCurrency(fatura.total)}
-                            {fatura.dueDate ? ` · Venc: ${formatDateShort(fatura.dueDate)}` : ''}
-                          </Text>
+                        <View style={styles.invoiceHeaderRow}>
+                          <Pressable
+                            onPress={() =>
+                              handleToggleInvoicePaid(fatura.accountId, fatura.invoiceMonth, paid ? 0 : 1)
+                            }
+                            hitSlop={12}
+                            style={[
+                              styles.invoiceCheckbox,
+                              {
+                                borderColor: colors.tabIconDefault,
+                                backgroundColor: paid ? (colors.expense ?? '#e74c3c') + '40' : 'transparent',
+                              },
+                            ]}
+                          >
+                            {paid && (
+                              <FontAwesome
+                                name="check"
+                                size={12}
+                                color={colors.expense ?? '#e74c3c'}
+                              />
+                            )}
+                          </Pressable>
+                          <Pressable
+                            onPress={toggleInvoiceExpanded}
+                            style={styles.invoiceHeaderMain}
+                            hitSlop={8}
+                          >
+                            <View style={styles.invoiceHeaderLeft}>
+                              <Text style={[styles.invoiceTitle, { color: colors.text }]}>
+                                {fatura.accountName} – {fatura.invoiceMonth}
+                              </Text>
+                              <Text style={[styles.invoiceMeta, { color: colors.tabIconDefault }]}>
+                                {pt.subtotal}: {formatCurrency(fatura.total)}
+                                {fatura.dueDate ? ` · Venc: ${formatDateShort(fatura.dueDate)}` : ''}
+                              </Text>
+                            </View>
+                            <FontAwesome
+                              name={isInvoiceExpanded ? 'chevron-down' : 'chevron-right'}
+                              size={16}
+                              color={colors.tabIconDefault}
+                              style={styles.invoiceChevron}
+                            />
+                          </Pressable>
                         </View>
-                        <FontAwesome
-                          name={isInvoiceExpanded ? 'chevron-down' : 'chevron-right'}
-                          size={16}
-                          color={colors.tabIconDefault}
-                          style={styles.invoiceChevron}
-                        />
-                      </Pressable>
-                    </View>
-                    {isInvoiceExpanded && (
-                      <View style={styles.invoiceTransactionsWrap}>
-                        {fatura.transactions.map((tx) =>
-                          tx.fixed_expense_id != null ? (
-                            <FixedExpenseListItem
-                              key={tx.id}
-                              transaction={tx}
-                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                            />
-                          ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
-                            <PlannedIncomeListItem
-                              key={tx.id}
-                              transaction={tx}
-                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                            />
-                          ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
-                            <FixedExpenseListItem
-                              key={tx.id}
-                              transaction={tx}
-                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                            />
-                          ) : (
-                            <TransactionListItem
-                              key={tx.id}
-                              transaction={tx}
-                              onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
-                            />
-                          )
+                        {isInvoiceExpanded && (
+                          <View style={styles.invoiceTransactionsWrap}>
+                            {fatura.transactions.map((tx) =>
+                              tx.fixed_expense_id != null ? (
+                                <FixedExpenseListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
+                                <PlannedIncomeListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
+                                <FixedExpenseListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : (
+                                <TransactionListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              )
+                            )}
+                          </View>
                         )}
                       </View>
-                    )}
-                  </View>
-                );
-              })
-            )
+                    );
+                  })
+                )
+              )}
+            </View>
           )}
-        </View>
-      )}
-
-      {/* Grupos por conta / forma de pagamento (débito, PIX, sem conta) */}
-      {nonCreditGroups.map((group) => {
+          {nonCreditGroups.map((group) => {
         const expanded = expandedNonCreditGroups[group.key] !== false;
         const toggle = () => toggleNonCreditGroup(group.key);
         return (
@@ -714,6 +766,207 @@ export default function HomeScreen() {
           </View>
         );
       })}
+        </>
+      ) : (
+        <>
+          {nonCreditGroups.map((group) => {
+            const expanded = expandedNonCreditGroups[group.key] !== false;
+            const toggle = () => toggleNonCreditGroup(group.key);
+            return (
+              <View key={group.key} style={styles.section}>
+                <Pressable
+                  onPress={toggle}
+                  style={({ pressed }) => [
+                    styles.sectionHeader,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                      {group.title}
+                    </Text>
+                    <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
+                      {pt.subtotal}: {formatCurrency(group.subtotal)}
+                    </Text>
+                  </View>
+                  <FontAwesome
+                    name={expanded ? 'chevron-down' : 'chevron-right'}
+                    size={18}
+                    color={colors.tabIconDefault}
+                  />
+                </Pressable>
+                {expanded && (
+                  group.items.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+                      {isFilterActive
+                        ? 'Nenhuma transação encontrada com os filtros aplicados'
+                        : pt.noTransactions}
+                    </Text>
+                  ) : (
+                    group.items.map((tx) =>
+                      tx.fixed_expense_id != null ? (
+                        <FixedExpenseListItem
+                          key={tx.id}
+                          transaction={tx}
+                          onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                          onTogglePaid={handleTogglePaid}
+                        />
+                      ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
+                        <PlannedIncomeListItem
+                          key={tx.id}
+                          transaction={tx}
+                          onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                          onTogglePaid={handleTogglePaid}
+                        />
+                      ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
+                        <FixedExpenseListItem
+                          key={tx.id}
+                          transaction={tx}
+                          onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                          onTogglePaid={handleTogglePaid}
+                        />
+                      ) : (
+                        <TransactionListItem
+                          key={tx.id}
+                          transaction={tx}
+                          onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                        />
+                      )
+                    )
+                  )
+                )}
+              </View>
+            );
+          })}
+          {(creditTransactions.length > 0 || creditInvoices.length > 0) && (
+            <View style={styles.section}>
+              <Pressable
+                onPress={() => setCreditExpanded((e: boolean) => !e)}
+                style={({ pressed }) => [
+                  styles.sectionHeader,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    {pt.credit}
+                  </Text>
+                  <Text style={[styles.sectionSubtotal, { color: colors.tabIconDefault }]}>
+                    {pt.subtotal}: {formatCurrency(creditSubtotal)}
+                  </Text>
+                </View>
+                <FontAwesome
+                  name={creditExpanded ? 'chevron-down' : 'chevron-right'}
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              </Pressable>
+              {creditExpanded && (
+                creditInvoices.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
+                    {isFilterActive
+                      ? 'Nenhuma transação encontrada com os filtros aplicados'
+                      : pt.noTransactions}
+                  </Text>
+                ) : (
+                  creditInvoices.map((fatura) => {
+                    const paid = getCreditInvoicePaid(fatura.accountId, fatura.invoiceMonth);
+                    const isInvoiceExpanded = expandedInvoices[fatura.key] !== false;
+                    const toggleInvoiceExpanded = () => {
+                      setExpandedInvoices((prev) => ({
+                        ...prev,
+                        [fatura.key]: !isInvoiceExpanded,
+                      }));
+                    };
+                    return (
+                      <View
+                        key={fatura.key}
+                        style={[styles.invoiceBlock, { backgroundColor: colors.theme.card }]}
+                      >
+                        <View style={styles.invoiceHeaderRow}>
+                          <Pressable
+                            onPress={() =>
+                              handleToggleInvoicePaid(fatura.accountId, fatura.invoiceMonth, paid ? 0 : 1)
+                            }
+                            hitSlop={12}
+                            style={[
+                              styles.invoiceCheckbox,
+                              {
+                                borderColor: colors.tabIconDefault,
+                                backgroundColor: paid ? (colors.expense ?? '#e74c3c') + '40' : 'transparent',
+                              },
+                            ]}
+                          >
+                            {paid && (
+                              <FontAwesome
+                                name="check"
+                                size={12}
+                                color={colors.expense ?? '#e74c3c'}
+                              />
+                            )}
+                          </Pressable>
+                          <Pressable
+                            onPress={toggleInvoiceExpanded}
+                            style={styles.invoiceHeaderMain}
+                            hitSlop={8}
+                          >
+                            <View style={styles.invoiceHeaderLeft}>
+                              <Text style={[styles.invoiceTitle, { color: colors.text }]}>
+                                {fatura.accountName} – {fatura.invoiceMonth}
+                              </Text>
+                              <Text style={[styles.invoiceMeta, { color: colors.tabIconDefault }]}>
+                                {pt.subtotal}: {formatCurrency(fatura.total)}
+                                {fatura.dueDate ? ` · Venc: ${formatDateShort(fatura.dueDate)}` : ''}
+                              </Text>
+                            </View>
+                            <FontAwesome
+                              name={isInvoiceExpanded ? 'chevron-down' : 'chevron-right'}
+                              size={16}
+                              color={colors.tabIconDefault}
+                              style={styles.invoiceChevron}
+                            />
+                          </Pressable>
+                        </View>
+                        {isInvoiceExpanded && (
+                          <View style={styles.invoiceTransactionsWrap}>
+                            {fatura.transactions.map((tx) =>
+                              tx.fixed_expense_id != null ? (
+                                <FixedExpenseListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'income') ? (
+                                <PlannedIncomeListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : ((tx.planned ?? 0) === 1 && tx.type === 'expense') ? (
+                                <FixedExpenseListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              ) : (
+                                <TransactionListItem
+                                  key={tx.id}
+                                  transaction={tx}
+                                  onPress={() => router.push(`/edit-transaction?id=${tx.id}`)}
+                                />
+                              )
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })
+                )
+              )}
+            </View>
+          )}
+        </>
+      )}
 
       {isFilterActive && (
         <View
